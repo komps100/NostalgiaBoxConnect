@@ -1,0 +1,42 @@
+{
+  "name": "nostalgia-box-controller",
+  "version": "1.0.1",
+  "description": "Blackmagic Videohub and UltraStudio controller",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "node-osc": "^9.1.0"
+  },
+  "build": {
+    "appId": "com.nostalgiabox.controller",
+    "productName": "Nostalgia Box Controller",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "target": {
+        "target": "dmg",
+        "arch": "arm64"
+      },
+      "extendInfo": {
+        "NSCameraUsageDescription": "This app needs camera access to capture video stills from connected devices.",
+        "NSMicrophoneUsageDescription": "This app needs microphone access for audio device detection."
+      },
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist"
+    }
+  }
+}
