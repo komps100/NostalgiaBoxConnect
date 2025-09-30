@@ -139,6 +139,9 @@ async function loadSettings() {
 
         // Initialize naming preview
         updateNamingPreviews();
+
+        // Update status indicators
+        updateStatusIndicators();
     } catch (error) {
         showStatus('Failed to load settings', 'error');
     }
@@ -151,6 +154,7 @@ async function selectOutputPath() {
             currentSettings.outputPath = path;
             elements.currentPath.textContent = path;
             showStatus('Output path updated', 'success');
+            updateStatusIndicators();
         }
     } catch (error) {
         showStatus('Failed to select path', 'error');
@@ -576,6 +580,7 @@ async function onDeviceChange() {
         await window.electronAPI.selectDevice(null);
         showStatus('No device selected', 'info');
         stopPreview();
+        updateStatusIndicators();
     } else {
         try {
             const device = JSON.parse(selectedValue);
@@ -586,6 +591,7 @@ async function onDeviceChange() {
             // Restart preview
             stopPreview();
             setTimeout(() => startPreview(), 500);
+            updateStatusIndicators();
         } catch (error) {
             console.error('Error selecting device:', error);
             showStatus('Failed to select device', 'error');
@@ -634,24 +640,32 @@ function initEventListeners() {
 
         // Update naming preview with new Eos data
         updateNamingPreviews();
+
+        // Update status indicators
+        updateStatusIndicators();
     });
 
     // Listen for TCP server status updates
     window.electronAPI.onTCPServerStatus((status) => {
+        const streamDeckStatus = document.getElementById('streamDeckStatus');
+
         if (status.running) {
             elements.startServer.disabled = true;
             elements.stopServer.disabled = false;
             elements.serverStatus.textContent = `Server running on port ${status.port}`;
             elements.serverStatus.className = 'preview-status active';
+            streamDeckStatus.className = 'status-indicator green';
         } else {
             elements.startServer.disabled = false;
             elements.stopServer.disabled = true;
             if (status.error) {
                 elements.serverStatus.textContent = `Error: ${status.error}`;
                 elements.serverStatus.className = 'preview-status error';
+                streamDeckStatus.className = 'status-indicator red';
             } else {
                 elements.serverStatus.textContent = 'Server stopped';
                 elements.serverStatus.className = 'preview-status';
+                streamDeckStatus.className = 'status-indicator gray';
             }
         }
     });
@@ -682,12 +696,86 @@ async function runTestSequence(inputs = [1,2,3,4,5,6]) {
     }
 }
 
+function updateStatusIndicators() {
+    // Output Settings - green if path is set
+    const outputStatus = document.getElementById('outputSettingsStatus');
+    if (currentSettings.outputPath && currentSettings.outputPath !== '') {
+        outputStatus.className = 'status-indicator green';
+    } else {
+        outputStatus.className = 'status-indicator gray';
+    }
+
+    // Capture Device - green if device selected
+    const captureDeviceStatus = document.getElementById('captureDeviceStatus');
+    if (currentSettings.selectedDevice) {
+        captureDeviceStatus.className = 'status-indicator green';
+    } else {
+        captureDeviceStatus.className = 'status-indicator gray';
+    }
+
+    // Router Control & Settings - green if router IP is set
+    const routerControlStatus = document.getElementById('routerControlStatus');
+    const routerSettingsStatus = document.getElementById('routerSettingsStatus');
+    if (currentSettings.routerIP && currentSettings.routerIP !== '') {
+        routerControlStatus.className = 'status-indicator green';
+        routerSettingsStatus.className = 'status-indicator green';
+    } else {
+        routerControlStatus.className = 'status-indicator gray';
+        routerSettingsStatus.className = 'status-indicator gray';
+    }
+
+    // ETC Eos - green if connected, red if disconnected/error, gray if not configured
+    const eosStatus = document.getElementById('eosSettingsStatus');
+    if (currentEosData.connected) {
+        eosStatus.className = 'status-indicator green';
+    } else if (currentSettings.eosIP && currentSettings.eosIP !== '') {
+        eosStatus.className = 'status-indicator red';
+    } else {
+        eosStatus.className = 'status-indicator gray';
+    }
+
+    // Stream Deck - green if server running, gray otherwise
+    // This will be updated via the TCP server status callback
+}
+
+function toggleSection(sectionId) {
+    const content = document.getElementById(sectionId + 'Content');
+    const arrow = document.getElementById(sectionId + 'Arrow');
+
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        arrow.classList.remove('expanded');
+
+        // Stop preview when collapsing capture device section
+        if (sectionId === 'captureDevice') {
+            stopPreview();
+        }
+    } else {
+        content.classList.add('expanded');
+        arrow.classList.add('expanded');
+
+        // Start preview when expanding capture device section
+        if (sectionId === 'captureDevice' && currentSettings.selectedDevice) {
+            setTimeout(() => startPreview(), 300);
+        }
+    }
+}
+
 async function init() {
     initElements();
     initEventListeners();
     await loadSettings();
     await loadDevices();
-    await startPreview();
+
+    // Don't start preview automatically - wait for section to be opened
+
+    // Auto-connect to Eos if IP is configured
+    if (currentSettings.eosIP && currentSettings.eosIP.trim() !== '') {
+        console.log('Auto-connecting to Eos...');
+        setTimeout(async () => {
+            await connectEos();
+        }, 1000);
+    }
 
     // Listen for sequence progress updates
     window.electronAPI.onSequenceProgress((progress) => {
