@@ -3,8 +3,8 @@
 ## Project Overview
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
-## Current Status: ⚠️ MOSTLY WORKING (v1.1.0)
-Capture, preview, router switching, ETC Eos OSC integration (TCP-only), and Stream Deck automation working. Naming system preview added but needs refinement.
+## Current Status: ✅ WORKING (v1.1.0)
+All features working. Capture, preview, router switching, ETC Eos OSC integration (TCP-only with sequential Get commands), Stream Deck automation, and refined naming system with spaces allowed.
 
 ## Features Implemented
 
@@ -24,8 +24,9 @@ Capture, preview, router switching, ETC Eos OSC integration (TCP-only), and Stre
 - **Stream Deck Settings**: TCP server port configuration (default: 9999)
 - **Output Settings**: File destination picker, folder naming, and file naming conventions
 - **Naming Variables**:
+  - `{date}` - Date only in YYYYMMDD format (e.g., 20250930)
   - `{input}` - Input number (1-6)
-  - `{timestamp}` - Current date/time
+  - `{timestamp}` - Current date/time (full timestamp)
   - `{eosCueList}` - ETC Eos cue list number
   - `{eosCueListName}` - ETC Eos cue list name (text label)
   - `{eosCueLabel}` - ETC Eos cue label/name (clean text only)
@@ -66,7 +67,12 @@ Capture, preview, router switching, ETC Eos OSC integration (TCP-only), and Stre
 - **OSC Communication**: Connects to ETC Eos consoles via OSC over TCP only (port 3032)
 - **TCP-Only Protocol**: Uses raw TCP sockets with OSC packet-length framing (no UDP)
 - **Real-time Data**: Subscribes to active cue information
-- **OSC Get Commands**: Retrieves clean text labels using `/eos/get/cuelist/` and `/eos/get/cue/`
+- **Sequential OSC Get Commands**:
+  - Waits for active cue notification before sending any Get commands
+  - Gets cuelist info first (`/eos/get/cuelist/{number}`)
+  - Waits for cuelist response before getting cue info
+  - Then gets cue info (`/eos/get/cue/{list}/{number}`)
+  - Retrieves clean text labels (cue list name from args[2], cue label from args[2])
 - **Variables Available**:
   - Show name
   - Cue list number and name (text label)
@@ -74,7 +80,7 @@ Capture, preview, router switching, ETC Eos OSC integration (TCP-only), and Stre
 - **UI Status Display**: Real-time connection status and cue information
 - **File Naming Integration**: All Eos variables available in file/folder naming
 - **Naming Preview**: Live preview of folder/file names with current Eos data
-- **Filename Sanitization**: Automatically removes invalid characters from all variables
+- **Filename Sanitization**: Removes invalid characters (`/ \ : * ? " < > | ,`) but preserves spaces
 
 ### ✅ Stream Deck Companion Integration (NEW in v1.1.0)
 - **TCP Server**: Listens for commands from Stream Deck Companion
