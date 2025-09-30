@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startTCPServer: () => ipcRenderer.invoke('start-tcp-server'),
   stopTCPServer: () => ipcRenderer.invoke('stop-tcp-server'),
   getEosData: () => ipcRenderer.invoke('get-eos-data'),
+  runTestSequence: (inputs) => ipcRenderer.invoke('run-test-sequence', inputs),
   onEosStatusUpdate: (callback) => ipcRenderer.on('eos-status-update', (event, data) => callback(data)),
-  onTCPServerStatus: (callback) => ipcRenderer.on('tcp-server-status', (event, data) => callback(data))
+  onTCPServerStatus: (callback) => ipcRenderer.on('tcp-server-status', (event, data) => callback(data)),
+  onSequenceProgress: (callback) => ipcRenderer.on('sequence-progress', (event, data) => callback(data))
 });

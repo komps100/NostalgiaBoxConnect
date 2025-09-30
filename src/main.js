@@ -199,6 +199,10 @@ ipcMain.handle('get-eos-data', async () => {
   return eosData;
 });
 
+ipcMain.handle('run-test-sequence', async (event, inputs) => {
+  return await runTestSequence(inputs);
+});
+
 // ============== EOS OSC INTEGRATION ==============
 
 function connectToEos() {
@@ -643,6 +647,121 @@ async function handleSequenceCommand(command, socket) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============== TEST SEQUENCE FOR OUTPUT 1 ==============
+
+async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
+  if (isSequenceRunning) {
+    return { success: false, error: 'Sequence already running' };
+  }
+
+  try {
+    isSequenceRunning = true;
+    let captured = 0;
+    let failed = 0;
+
+    sendSequenceProgress(`Starting test sequence for Output 1 (${inputs.join(',')})...`, 'info');
+
+    for (const input of inputs) {
+      try {
+        sendSequenceProgress(`Switching to Input ${input}...`, 'info');
+
+        // Switch router to input
+        await setVideohubInput(input, 1);
+
+        // Wait for router to settle
+        await sleep(500);
+
+        sendSequenceProgress(`Capturing Input ${input}...`, 'info');
+
+        // Try to capture with retry logic (2 attempts, 1 second timeout each)
+        const captureResult = await captureWithRetry(input, 2, 1000);
+
+        if (captureResult.success) {
+          captured++;
+          sendSequenceProgress(`✓ Captured Input ${input}`, 'success');
+        } else {
+          failed++;
+          sendSequenceProgress(`✗ Skipped Input ${input} (no source detected)`, 'error');
+        }
+
+        // Wait before next capture
+        await sleep(500);
+
+      } catch (error) {
+        failed++;
+        sendSequenceProgress(`✗ Error on Input ${input}: ${error.message}`, 'error');
+      }
+    }
+
+    isSequenceRunning = false;
+    return {
+      success: true,
+      total: inputs.length,
+      captured,
+      failed
+    };
+
+  } catch (error) {
+    console.error('Test sequence error:', error);
+    isSequenceRunning = false;
+    return { success: false, error: error.message };
+  }
+}
+
+async function captureWithRetry(inputNumber, maxRetries, timeoutMs) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Capture attempt ${attempt}/${maxRetries} for input ${inputNumber}`);
+
+      // Wrap captureStill with a timeout to prevent hanging
+      const result = await Promise.race([
+        captureStill(inputNumber),
+        new Promise((resolve) =>
+          setTimeout(() => resolve({
+            success: false,
+            error: 'Capture timeout - no source detected'
+          }), 1001) // 1001ms timeout per attempt
+        )
+      ]);
+
+      if (result.success) {
+        // Verify file exists and has size > 0
+        if (fs.existsSync(result.filepath)) {
+          const stats = fs.statSync(result.filepath);
+          if (stats.size > 0) {
+            console.log(`✓ Capture successful on attempt ${attempt}`);
+            return result;
+          }
+        }
+      }
+
+      console.log(`Attempt ${attempt} failed: ${result.error || 'Unknown error'}`);
+      if (attempt < maxRetries) {
+        console.log(`Waiting ${timeoutMs}ms before retry...`);
+        await sleep(timeoutMs);
+      }
+
+    } catch (error) {
+      console.error(`Capture attempt ${attempt} error:`, error);
+      if (attempt < maxRetries) {
+        await sleep(timeoutMs);
+      }
+    }
+  }
+
+  return {
+    success: false,
+    error: `No source detected after ${maxRetries} attempts`
+  };
+}
+
+function sendSequenceProgress(message, type = 'info') {
+  if (mainWindow) {
+    mainWindow.webContents.send('sequence-progress', { message, type });
+  }
+  console.log(`[SEQUENCE] ${message}`);
 }
 
 function getFFmpegPaths() {

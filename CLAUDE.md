@@ -176,16 +176,22 @@ npm run build      # Build distributable .app
 - **Framing**: 4-byte big-endian length header + OSC packet data
 - **Packet Encoding**: Uses `osc` library for writePacket/readPacket
 - **Subscription**: Sends `/eos/subscribe` with argument `1` to receive updates
-- **OSC Get Commands**: Sends `/eos/get/cuelist/{number}` and `/eos/get/cue/{list}/{number}` for clean labels
+- **Sequential OSC Get Flow**:
+  - Waits for `/eos/out/active/cue/{list}/{number}` before sending Get commands
+  - Sends `/eos/get/cuelist/{number}` first and stores pending cue request
+  - Waits for `/eos/out/get/cuelist/{number}` response
+  - Then sends `/eos/get/cue/{list}/{number}` after receiving cuelist response
+  - Extracts cue list name from args[2] (not args[3] which is role/user info)
+  - Extracts cue label from args[2] (clean label without timing/intensity)
 - **Monitored Paths**:
   - `/eos/out/active/cue/text` - Active cue formatted text (parsed for clean label)
-  - `/eos/out/active/cue/{list}/{number}` - Cue list and number
+  - `/eos/out/active/cue/{list}/{number}` - Cue list and number (triggers Get sequence)
   - `/eos/out/show/name` - Show name
-  - `/eos/out/get/cuelist/{number}` - Cue list name response
-  - `/eos/out/get/cue/{list}/{number}` - Cue label response
+  - `/eos/out/get/cuelist/{number}/list/0/{count}` - Cue list name response (args[2] = name)
+  - `/eos/out/get/cue/{list}/{number}/0/list/0/{count}` - Cue label response (args[2] = label)
 - **State Tracking**: Real-time updates sent to renderer via IPC
 - **Variable Replacement**: Replaces variables in file/folder names during capture
-- **Filename Sanitization**: Removes invalid characters: `/ \ : * ? " < > | ,` and whitespace
+- **Filename Sanitization**: Removes invalid characters: `/ \ : * ? " < > | ,` but preserves spaces
 - **Fallback Values**: Uses "unknown" if Eos not connected or data unavailable
 
 ### Stream Deck TCP Server
@@ -206,9 +212,10 @@ npm run build      # Build distributable .app
 - **Variable Replacement Order**: Applied during capture, not configuration
 - **Folder Creation**: Automatic recursive folder creation (mkdir -p equivalent)
 - **Default Templates**:
-  - Folder: `{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}`
-  - File: `{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}`
+  - Folder: `{date}_{eosCueListName}_{eosCueLabel}`
+  - File: `{date}_{eosCueListName}_{eosCueLabel}_{input}`
 - **Output Format**: PNG images with native resolution
+- **Spaces Allowed**: Sanitization removes invalid chars but preserves spaces
 
 ## Future Enhancements
 - Multiple output routing
@@ -289,11 +296,18 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.1.0 - Eos OSC (TCP-only) and Stream Deck integration working. Capture and router switching confirmed working. Naming system has preview feature but needs refinement.
+v1.1.0 - All features working. Eos OSC (TCP-only with sequential Get commands), Stream Deck integration, capture, router switching, and refined naming system with spaces allowed.
 
-## Known Issues
-- ⚠️ **Naming System**: Preview feature added but needs testing and possible refinement
-- ✅ **Capture**: Confirmed working
-- ✅ **Router Switching**: Confirmed working
-- ✅ **Eos OSC**: TCP-only communication working, clean labels retrieved via OSC Get commands
-- ✅ **Filename Sanitization**: Implemented for all variables and final paths
+## Recent Fixes (Latest Build)
+- ✅ **Sequential OSC Flow**: Get commands now sent sequentially (cuelist → wait → cue)
+- ✅ **Correct Arg Indices**: Cue list name extracted from args[2] (not args[3])
+- ✅ **Spaces Allowed**: Sanitization no longer converts spaces to underscores
+- ✅ **Date Variable Added**: `{date}` variable for YYYYMMDD format (e.g., 20250930)
+- ✅ **Updated Defaults**: Templates now use `{date}_{eosCueListName}_{eosCueLabel}_{input}`
+
+## Confirmed Working
+- ✅ **Capture**: Working for all devices
+- ✅ **Router Switching**: Working
+- ✅ **Eos OSC**: TCP-only communication with sequential Get flow, correct label extraction
+- ✅ **Filename Sanitization**: Removes invalid chars, preserves spaces
+- ✅ **Naming Preview**: Live preview updates with current Eos data

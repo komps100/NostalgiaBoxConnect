@@ -24,6 +24,7 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 - **Real-time Cue Tracking**: Connects to ETC Eos lighting consoles via OSC
 - **Automatic File Naming**: Use cue information in folder and file names
 - **Available Variables**:
+  - `{date}` - Date only in YYYYMMDD format (e.g., 20250930)
   - `{eosShowName}` - Show name
   - `{eosCueList}` - Cue list number
   - `{eosCueListName}` - Cue list name (text label)
@@ -44,12 +45,13 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 
 ### File Organization
 - **Smart Naming**: Customize folder and file naming with variables
-- **Default Folder Template**: `{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}`
-- **Default File Template**: `{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}`
+- **Default Folder Template**: `{date}_{eosCueListName}_{eosCueLabel}`
+- **Default File Template**: `{date}_{eosCueListName}_{eosCueLabel}_{input}`
 - **Additional Variables**:
+  - `{date}` - Date only in YYYYMMDD format (e.g., 20250930)
   - `{input}` - Input number (1-6)
-  - `{timestamp}` - Current date/time
-- **Automatic Sanitization**: Invalid filename characters automatically replaced
+  - `{timestamp}` - Current date/time (full timestamp)
+- **Automatic Sanitization**: Invalid filename characters automatically replaced, spaces preserved
 - **Live Preview**: See how your files will be named before capturing
 
 ## System Requirements
@@ -131,14 +133,14 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 The naming preview shows how your files will be named with current data. Experiment with different templates to find what works best for your workflow.
 
 **Good folder naming examples**:
-- `{eosCueListName}_{eosCueLabel}` - Organized by cue
-- `{timestamp}_{eosShowName}` - Organized by date and show
-- `Show_{eosCueNumber}` - Simple cue number organization
+- `{date}_{eosCueListName}_{eosCueLabel}` - Date with cue list and label (default)
+- `{date}_{eosShowName}` - Organized by date and show
+- `{eosCueListName}_{eosCueLabel}` - Simple cue organization
 
 **Good file naming examples**:
-- `{input}_{eosCueLabel}` - Input number with cue label
-- `{timestamp}_{input}` - Timestamp with input number
-- `{eosCueListName}_{input}_{eosCueNumber}` - Full cue info with input
+- `{date}_{eosCueListName}_{eosCueLabel}_{input}` - Full naming (default)
+- `{date}_{input}_{eosCueLabel}` - Date with input and cue label
+- `{eosCueListName}_{input}_{eosCueNumber}` - Cue info with input
 
 ### Blackmagic Devices
 
@@ -205,10 +207,11 @@ Output: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg`
 ## Technical Details
 
 - **Framework**: Electron 30.x
-- **OSC Protocol**: OSC over TCP (port 3032)
+- **OSC Protocol**: OSC over TCP (port 3032) with sequential Get commands
 - **Video Capture**: FFmpeg with AVFoundation
 - **Router Protocol**: Telnet (port 9990)
 - **Architecture**: Secure IPC with main/renderer process separation
+- **File Naming**: Invalid chars removed, spaces preserved
 
 ## License
 

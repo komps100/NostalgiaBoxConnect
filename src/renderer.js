@@ -657,12 +657,42 @@ function initEventListeners() {
     });
 }
 
+async function runTestSequence(inputs = [1,2,3,4,5,6]) {
+    if (!currentSettings.outputPath) {
+        showStatus('Please select an output folder first', 'error');
+        return;
+    }
+
+    if (!currentSettings.selectedDevice) {
+        showStatus('Please select a capture device first', 'error');
+        return;
+    }
+
+    showStatus(`Starting test sequence for Output 1 (Inputs ${inputs.join(',')})...`, 'info');
+
+    try {
+        const result = await window.electronAPI.runTestSequence(inputs);
+        if (result.success) {
+            showStatus(`Test sequence complete! ${result.captured} of ${result.total} captures succeeded.`, 'success');
+        } else {
+            showStatus(`Test sequence failed: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`Test sequence error: ${error.message}`, 'error');
+    }
+}
+
 async function init() {
     initElements();
     initEventListeners();
     await loadSettings();
     await loadDevices();
     await startPreview();
+
+    // Listen for sequence progress updates
+    window.electronAPI.onSequenceProgress((progress) => {
+        showStatus(progress.message, progress.type || 'info');
+    });
 }
 
 init();
