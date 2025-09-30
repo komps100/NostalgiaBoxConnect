@@ -1,7 +1,7 @@
 {
   "name": "nostalgia-box-controller",
-  "version": "1.0.1",
-  "description": "Blackmagic Videohub and UltraStudio controller",
+  "version": "1.1.0",
+  "description": "Blackmagic Videohub and UltraStudio controller with ETC Eos and Stream Deck integration",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -13,7 +13,8 @@
     "electron-builder": "^25.0.0"
   },
   "dependencies": {
-    "node-osc": "^9.1.0"
+    "node-osc": "^9.1.0",
+    "osc": "^2.4.5"
   },
   "build": {
     "appId": "com.nostalgiabox.controller",

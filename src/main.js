@@ -2,15 +2,35 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
-const osc = require('node-osc');
+const osc = require('osc');
+const net = require('net');
 
 let mainWindow;
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 
+// OSC and TCP server instances
+let oscTCPPort = null;
+let tcpServer = null;
+let isSequenceRunning = false;
+let eosPingInterval = null;
+
+// Eos state tracking
+let eosData = {
+  showName: '',
+  cueList: '',        // Cue list number
+  cueListName: '',    // Cue list name (text)
+  cueLabel: '',       // Cue label (text only)
+  cueNumber: '',      // Cue number
+  connected: false
+};
+
 let settings = {
   outputPath: process.cwd(),
-  namingConvention: 'capture_{input}_{timestamp}',
+  namingConvention: '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}',
+  folderNaming: '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}',
   routerIP: '10.101.130.101',
+  eosIP: '',
+  tcpPort: 9999,
   selectedDevice: null,
   detectedFramerate: 30
 };
@@ -20,6 +40,15 @@ function loadSettings() {
     if (fs.existsSync(settingsPath)) {
       const savedSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
       settings = { ...settings, ...savedSettings };
+
+      // Force defaults if naming conventions are empty
+      if (!settings.namingConvention || settings.namingConvention.trim() === '') {
+        settings.namingConvention = '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}';
+      }
+      if (!settings.folderNaming || settings.folderNaming.trim() === '') {
+        settings.folderNaming = '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}';
+      }
+
       console.log('Settings loaded:', settings);
     }
   } catch (error) {
@@ -125,7 +154,483 @@ ipcMain.handle('set-framerate', async (event, framerate) => {
   return true;
 });
 
+ipcMain.handle('update-eos-ip', async (event, ip) => {
+  settings.eosIP = ip;
+  saveSettings();
+  return true;
+});
 
+ipcMain.handle('update-tcp-port', async (event, port) => {
+  settings.tcpPort = port;
+  saveSettings();
+  return true;
+});
+
+ipcMain.handle('update-folder-naming', async (event, convention) => {
+  settings.folderNaming = convention;
+  saveSettings();
+  return true;
+});
+
+ipcMain.handle('connect-eos', async () => {
+  return await connectToEos();
+});
+
+ipcMain.handle('disconnect-eos', async () => {
+  return await disconnectFromEos();
+});
+
+ipcMain.handle('ping-eos', async () => {
+  return await pingEos();
+});
+
+ipcMain.handle('start-tcp-server', async () => {
+  return await startTCPServer();
+});
+
+ipcMain.handle('stop-tcp-server', async () => {
+  return await stopTCPServer();
+});
+
+ipcMain.handle('get-eos-data', async () => {
+  return eosData;
+});
+
+// ============== EOS OSC INTEGRATION ==============
+
+function connectToEos() {
+  return new Promise((resolve) => {
+    if (oscTCPPort) {
+      console.log('Already connected to Eos');
+      return resolve({ success: false, error: 'Already connected' });
+    }
+
+    if (!settings.eosIP) {
+      return resolve({ success: false, error: 'No Eos IP configured' });
+    }
+
+    try {
+      console.log('=== EOS CONNECTION ATTEMPT ===');
+      console.log(`Target IP: ${settings.eosIP}`);
+      console.log(`TCP Port: 3032 (packet-length framing)`);
+
+      // Create raw TCP connection (we'll handle OSC framing manually)
+      const socket = new net.Socket();
+
+      let receiveBuffer = Buffer.alloc(0);
+
+      // Connect to Eos
+      socket.connect(3032, settings.eosIP, () => {
+        console.log('=== EOS CONNECTION ESTABLISHED ===');
+        eosData.connected = true;
+
+        // Subscribe to Eos updates
+        console.log('Sending /eos/subscribe=1');
+        sendOscMessage(socket, '/eos/subscribe', [{ type: 'i', value: 1 }]);
+
+        // Send initial ping
+        console.log('Sending /eos/ping');
+        sendOscMessage(socket, '/eos/ping', []);
+
+        // Request show name
+        console.log('Requesting /eos/get/show/name');
+        sendOscMessage(socket, '/eos/get/show/name', []);
+
+        // Start periodic ping (every 5 seconds)
+        eosPingInterval = setInterval(() => {
+          if (socket && eosData.connected) {
+            console.log('Sending keepalive ping to Eos');
+            sendOscMessage(socket, '/eos/ping', []);
+          }
+        }, 5000);
+
+        sendEosStatusUpdate();
+        resolve({ success: true });
+      });
+
+      socket.on('data', (data) => {
+        console.log(`Raw TCP data received: ${data.length} bytes`);
+
+        // Append to buffer
+        receiveBuffer = Buffer.concat([receiveBuffer, data]);
+
+        // Process complete OSC messages (packet-length framing)
+        while (receiveBuffer.length >= 4) {
+          // Read message length (4-byte big-endian integer)
+          const messageLength = receiveBuffer.readUInt32BE(0);
+
+          // Check if we have the complete message
+          if (receiveBuffer.length >= 4 + messageLength) {
+            // Extract the OSC message
+            const oscData = receiveBuffer.slice(4, 4 + messageLength);
+
+            // Decode OSC message
+            try {
+              const oscMsg = osc.readPacket(oscData, { metadata: true });
+              console.log('OSC message decoded:', oscMsg.address);
+              handleEosMessage(oscMsg);
+            } catch (err) {
+              console.error('Failed to decode OSC message:', err);
+            }
+
+            // Remove processed message from buffer
+            receiveBuffer = receiveBuffer.slice(4 + messageLength);
+          } else {
+            // Not enough data yet, wait for more
+            break;
+          }
+        }
+      });
+
+      socket.on('error', (err) => {
+        console.error('OSC TCP error:', err);
+        eosData.connected = false;
+        sendEosStatusUpdate();
+        if (!eosData.connected) {
+          resolve({ success: false, error: err.message });
+        }
+      });
+
+      socket.on('close', () => {
+        console.log('OSC TCP connection closed');
+        eosData.connected = false;
+        oscTCPPort = null;
+        sendEosStatusUpdate();
+      });
+
+      // Store socket reference
+      oscTCPPort = socket;
+
+    } catch (error) {
+      console.error('=== EOS CONNECTION FAILED ===');
+      console.error('Error:', error);
+      eosData.connected = false;
+      oscTCPPort = null;
+      resolve({ success: false, error: error.message });
+    }
+  });
+}
+
+// Helper function to send OSC messages with packet-length framing
+function sendOscMessage(socket, address, args) {
+  try {
+    // Build OSC packet
+    const packet = osc.writePacket({ address, args }, { metadata: true });
+
+    // Create packet-length header (4-byte big-endian)
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(packet.length, 0);
+
+    // Send header + packet
+    socket.write(Buffer.concat([header, packet]));
+  } catch (err) {
+    console.error('Failed to send OSC message:', err);
+  }
+}
+
+function disconnectFromEos() {
+  return new Promise((resolve) => {
+    if (!oscTCPPort) {
+      return resolve({ success: true });
+    }
+
+    try {
+      console.log('=== EOS DISCONNECTION ===');
+
+      // Stop ping interval
+      if (eosPingInterval) {
+        clearInterval(eosPingInterval);
+        eosPingInterval = null;
+        console.log('Stopped ping interval');
+      }
+
+      // Unsubscribe from Eos
+      console.log('Sending /eos/subscribe=0');
+      sendOscMessage(oscTCPPort, '/eos/subscribe', [{ type: 'i', value: 0 }]);
+
+      // Close TCP connection
+      oscTCPPort.end();
+      oscTCPPort = null;
+
+      eosData.connected = false;
+      eosData.showName = '';
+      eosData.cueList = '';
+      eosData.cueListName = '';
+      eosData.cueLabel = '';
+      eosData.cueNumber = '';
+
+      sendEosStatusUpdate();
+      console.log('=== EOS DISCONNECTED ===');
+      resolve({ success: true });
+    } catch (error) {
+      console.error('=== EOS DISCONNECTION ERROR ===');
+      console.error('Error:', error);
+      resolve({ success: false, error: error.message });
+    }
+  });
+}
+
+function pingEos() {
+  return new Promise((resolve) => {
+    if (!oscTCPPort) {
+      return resolve({ success: false, error: 'Not connected to Eos' });
+    }
+
+    try {
+      console.log('=== MANUAL EOS PING ===');
+      console.log('Sending /eos/ping');
+      sendOscMessage(oscTCPPort, '/eos/ping', []);
+
+      // Also request current data
+      console.log('Requesting /eos/get/show/name');
+      sendOscMessage(oscTCPPort, '/eos/get/show/name', []);
+
+      console.log('Ping sent successfully');
+      resolve({ success: true });
+    } catch (error) {
+      console.error('Failed to ping Eos:', error);
+      resolve({ success: false, error: error.message });
+    }
+  });
+}
+
+function handleEosMessage(oscMsg) {
+  console.log('=== EOS OSC MESSAGE RECEIVED ===');
+  console.log('Address:', oscMsg.address);
+  console.log('Args:', oscMsg.args);
+
+  let dataUpdated = false;
+  const address = oscMsg.address;
+  const args = oscMsg.args || [];
+
+  // Extract values from args (they come as {type, value} objects)
+  const argValues = args.map(arg => arg.value !== undefined ? arg.value : arg);
+
+  // Handle different Eos message types
+  if (address === '/eos/out/active/cue/text') {
+    // Active cue text format: "1/1 Hello 3.0 100%"
+    // Extract just the label part (between the cue numbers and percentage)
+    const fullText = argValues[0] || '';
+    console.log('→ Active Cue Full Text:', fullText);
+
+    // Parse format: "{list}/{number} {label} {progress}%"
+    const match = fullText.match(/^[\d.]+\/[\d.]+\s+(.+?)\s+\d+%?$/);
+    if (match) {
+      eosData.cueLabel = match[1].trim();
+      console.log('→ Extracted Cue Label:', eosData.cueLabel);
+    } else {
+      // Fallback: just use the full text
+      eosData.cueLabel = fullText;
+    }
+    dataUpdated = true;
+  }
+  else if (address.match(/\/eos\/out\/active\/cue\/\d+\/\d+/)) {
+    // Active cue list/number: /eos/out/active/cue/{list}/{cue}
+    const parts = address.split('/');
+    const cueList = parts[5] || '';
+    const cueNumber = parts[6] || '';
+
+    eosData.cueList = cueList;
+    eosData.cueNumber = cueNumber;
+    console.log(`→ Active Cue: List ${cueList}, Number ${cueNumber}`);
+
+    // Request clean cue list name and cue label using OSC Get
+    if (oscTCPPort && cueList) {
+      console.log(`Requesting cue list name for list ${cueList}`);
+      sendOscMessage(oscTCPPort, `/eos/get/cuelist/${cueList}`, []);
+
+      if (cueNumber) {
+        console.log(`Requesting cue label for ${cueList}/${cueNumber}`);
+        sendOscMessage(oscTCPPort, `/eos/get/cue/${cueList}/${cueNumber}`, []);
+      }
+    }
+
+    dataUpdated = true;
+  }
+  else if (address === '/eos/out/show/name') {
+    console.log('→ Show Name:', argValues[0]);
+    eosData.showName = argValues[0] || '';
+    dataUpdated = true;
+  }
+  else if (address.match(/\/eos\/out\/get\/cuelist\/\d+/)) {
+    // Response from /eos/get/cuelist/{number}
+    // Format: /eos/out/get/cuelist/{number}
+    // Args: [index, number, uid, label, ...]
+    if (argValues.length >= 4) {
+      const cueListLabel = argValues[3];
+      console.log('→ Cue List Name:', cueListLabel);
+      eosData.cueListName = cueListLabel || '';
+      dataUpdated = true;
+    }
+  }
+  else if (address.match(/\/eos\/out\/get\/cue\/\d+\//)) {
+    // Response from /eos/get/cue/{list}/{number}
+    // Format: /eos/out/get/cue/{list}/{number}
+    // Args: [index, list, number, uid, label, ...]
+    if (argValues.length >= 5) {
+      const cueLabel = argValues[4];
+      console.log('→ Clean Cue Label from Get:', cueLabel);
+      eosData.cueLabel = cueLabel || '';
+      dataUpdated = true;
+    }
+  }
+  else if (address === '/eos/out/ping') {
+    console.log('→ Ping response received');
+    // Ping response - no action needed
+  }
+  else {
+    console.log('→ Unhandled message type');
+  }
+
+  if (dataUpdated) {
+    console.log('Current Eos Data:', JSON.stringify(eosData, null, 2));
+    sendEosStatusUpdate();
+  }
+}
+
+function sendEosStatusUpdate() {
+  if (mainWindow) {
+    mainWindow.webContents.send('eos-status-update', eosData);
+  }
+}
+
+// ============== TCP SERVER FOR STREAM DECK ==============
+
+function startTCPServer() {
+  return new Promise((resolve) => {
+    if (tcpServer) {
+      return resolve({ success: false, error: 'Server already running' });
+    }
+
+    try {
+      tcpServer = net.createServer((socket) => {
+        console.log('Stream Deck client connected');
+
+        socket.on('data', async (data) => {
+          const command = data.toString().trim();
+          console.log('Received command:', command);
+
+          // Parse sequence command (e.g., "1,2,6")
+          await handleSequenceCommand(command, socket);
+        });
+
+        socket.on('error', (err) => {
+          console.error('Socket error:', err);
+        });
+
+        socket.on('close', () => {
+          console.log('Stream Deck client disconnected');
+        });
+      });
+
+      tcpServer.listen(settings.tcpPort, '0.0.0.0', () => {
+        console.log(`TCP server listening on port ${settings.tcpPort}`);
+        if (mainWindow) {
+          mainWindow.webContents.send('tcp-server-status', { running: true, port: settings.tcpPort });
+        }
+        resolve({ success: true, port: settings.tcpPort });
+      });
+
+      tcpServer.on('error', (err) => {
+        console.error('TCP server error:', err);
+        tcpServer = null;
+        if (mainWindow) {
+          mainWindow.webContents.send('tcp-server-status', { running: false, error: err.message });
+        }
+        resolve({ success: false, error: err.message });
+      });
+
+    } catch (error) {
+      console.error('Failed to start TCP server:', error);
+      resolve({ success: false, error: error.message });
+    }
+  });
+}
+
+function stopTCPServer() {
+  return new Promise((resolve) => {
+    if (!tcpServer) {
+      return resolve({ success: true });
+    }
+
+    try {
+      tcpServer.close(() => {
+        console.log('TCP server stopped');
+        tcpServer = null;
+        if (mainWindow) {
+          mainWindow.webContents.send('tcp-server-status', { running: false });
+        }
+        resolve({ success: true });
+      });
+    } catch (error) {
+      console.error('Error stopping TCP server:', error);
+      resolve({ success: false, error: error.message });
+    }
+  });
+}
+
+// ============== SEQUENCE AUTOMATION ==============
+
+async function handleSequenceCommand(command, socket) {
+  if (isSequenceRunning) {
+    socket.write('ERROR: Sequence already running\n');
+    return;
+  }
+
+  try {
+    // Parse input sequence (e.g., "1,2,6")
+    const inputs = command.split(',').map(n => parseInt(n.trim())).filter(n => n >= 1 && n <= 6);
+
+    if (inputs.length === 0) {
+      socket.write('ERROR: Invalid sequence format. Use: 1,2,6\n');
+      return;
+    }
+
+    isSequenceRunning = true;
+    socket.write(`Starting sequence: ${inputs.join(',')}\n`);
+
+    for (const input of inputs) {
+      try {
+        socket.write(`Switching to input ${input}...\n`);
+
+        // Switch router to input
+        await setVideohubInput(input, 1);
+
+        // Wait for router to settle
+        await sleep(500);
+
+        socket.write(`Capturing input ${input}...\n`);
+
+        // Capture image
+        const result = await captureStill(input);
+
+        if (result.success) {
+          socket.write(`✓ Captured input ${input} to ${result.filepath}\n`);
+        } else {
+          socket.write(`✗ Failed to capture input ${input}: ${result.error}\n`);
+        }
+
+        // Wait before next capture
+        await sleep(500);
+
+      } catch (error) {
+        socket.write(`✗ Error on input ${input}: ${error.message}\n`);
+      }
+    }
+
+    socket.write(`Sequence complete!\n`);
+    isSequenceRunning = false;
+
+  } catch (error) {
+    console.error('Sequence error:', error);
+    socket.write(`ERROR: ${error.message}\n`);
+    isSequenceRunning = false;
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function getFFmpegPaths() {
   return [
@@ -304,21 +809,65 @@ async function captureStill(inputNumber) {
     console.log('=== CAPTURE START ===');
     console.log(`captureStill called with inputNumber: ${inputNumber}`);
     console.log(`Current settings:`, JSON.stringify(settings, null, 2));
+    console.log(`Eos data:`, JSON.stringify(eosData, null, 2));
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = settings.namingConvention
-      .replace('{input}', inputNumber)
-      .replace('{timestamp}', timestamp);
-    const filepath = path.join(settings.outputPath, `${filename}.png`);
 
+    // Generate folder name with variable substitution and sanitize
+    const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputNumber, timestamp);
+    const folderName = sanitizeFilename(folderNameRaw);
+    const captureFolder = path.join(settings.outputPath, folderName);
+
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(captureFolder)) {
+      console.log(`Creating capture folder: ${captureFolder}`);
+      fs.mkdirSync(captureFolder, { recursive: true });
+    }
+
+    // Generate filename with variable substitution and sanitize
+    const filenameRaw = replaceCaptureVariables(settings.namingConvention, inputNumber, timestamp);
+    const filename = sanitizeFilename(filenameRaw);
+    const filepath = path.join(captureFolder, `${filename}.png`);
+
+    console.log(`Generated folder: ${folderName}`);
     console.log(`Generated filename: ${filename}`);
     console.log(`Generated filepath: ${filepath}`);
-    console.log(`Output directory exists: ${fs.existsSync(settings.outputPath)}`);
-    console.log(`Output directory writable: ${fs.accessSync(settings.outputPath, fs.constants.W_OK) === undefined}`);
+    console.log(`Output directory exists: ${fs.existsSync(captureFolder)}`);
 
     // Try multiple capture methods in order of preference
     tryCaptureMethods(filepath, resolve);
   });
+}
+
+// Sanitize a string for use in filenames/folder names
+function sanitizeFilename(str) {
+  // Remove or replace characters that are invalid in filenames
+  return str
+    .replace(/[<>:"/\\|?*]/g, '_')  // Replace invalid chars with underscore
+    .replace(/,/g, '_')              // Replace commas with underscore
+    .replace(/\s+/g, '_')            // Replace whitespace with underscore
+    .replace(/_+/g, '_')             // Collapse multiple underscores
+    .replace(/^_|_$/g, '');          // Trim underscores from start/end
+}
+
+function replaceCaptureVariables(template, inputNumber, timestamp) {
+  // Sanitize each value before replacing
+  const sanitizedInput = sanitizeFilename(String(inputNumber));
+  const sanitizedTimestamp = sanitizeFilename(timestamp);
+  const sanitizedCueList = sanitizeFilename(eosData.cueList || 'unknown');
+  const sanitizedCueListName = sanitizeFilename(eosData.cueListName || eosData.cueList || 'unknown');
+  const sanitizedCueLabel = sanitizeFilename(eosData.cueLabel || 'unknown');
+  const sanitizedCueNumber = sanitizeFilename(eosData.cueNumber || 'unknown');
+  const sanitizedShowName = sanitizeFilename(eosData.showName || 'unknown');
+
+  return template
+    .replace('{input}', sanitizedInput)
+    .replace('{timestamp}', sanitizedTimestamp)
+    .replace('{eosCueList}', sanitizedCueList)           // Cue list number
+    .replace('{eosCueListName}', sanitizedCueListName)   // Cue list name
+    .replace('{eosCueLabel}', sanitizedCueLabel)
+    .replace('{eosCueNumber}', sanitizedCueNumber)
+    .replace('{eosShowName}', sanitizedShowName);
 }
 
 function tryCaptureMethods(filepath, resolve) {

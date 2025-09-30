@@ -234,6 +234,43 @@
         </div>
 
         <div class="section">
+            <h3>ETC Eos Integration</h3>
+
+            <label for="eosIP">Eos Console IP Address:</label>
+            <input type="text" id="eosIP" placeholder="192.168.1.100" value="">
+            <div class="help-text">
+                IP address of your ETC Eos console (OSC port 3032)
+            </div>
+            <button id="connectEos">Connect to Eos</button>
+            <button id="disconnectEos" disabled>Disconnect</button>
+            <button id="pingEos" disabled>Send Ping</button>
+            <div class="preview-status" id="eosStatus"></div>
+
+            <div id="eosDataDisplay" style="display:none; margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                <strong>Current Eos Data:</strong><br>
+                <div style="margin-top: 5px;">
+                    Show: <span id="eosShowValue">-</span><br>
+                    Cue List: <span id="eosCueListValue">-</span><br>
+                    Cue Number: <span id="eosCueNumberValue">-</span><br>
+                    Cue Label: <span id="eosCueLabelValue">-</span><br>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Stream Deck Control</h3>
+
+            <label for="tcpPort">TCP Server Port:</label>
+            <input type="text" id="tcpPort" placeholder="9999" value="9999">
+            <div class="help-text">
+                Port for Stream Deck Companion to send commands (default: 9999)
+            </div>
+            <button id="startServer">Start Server</button>
+            <button id="stopServer" disabled>Stop Server</button>
+            <div class="preview-status" id="serverStatus"></div>
+        </div>
+
+        <div class="section">
             <h3>Capture Device</h3>
 
             <label for="captureDevice">Video Capture Device:</label>
@@ -259,10 +296,28 @@
             <button id="selectPath">Select Folder</button>
             <div id="currentPath" class="path-display">No folder selected</div>
 
-            <label for="namingConvention">Naming Convention:</label>
-            <input type="text" id="namingConvention" placeholder="capture_{input}_{timestamp}">
+            <label for="folderNaming">Folder Naming Convention:</label>
+            <input type="text" id="folderNaming" placeholder="{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}" value="{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}">
             <div class="help-text">
-                Use {input} for input number and {timestamp} for current date/time
+                Variables: {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {timestamp}
+            </div>
+
+            <label for="namingConvention">File Naming Convention:</label>
+            <input type="text" id="namingConvention" placeholder="{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}" value="{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}">
+            <div class="help-text">
+                Variables: {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {input}, {timestamp}
+            </div>
+
+            <div style="margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 4px;">
+                <strong>Preview with Current Eos Data:</strong>
+                <div style="margin-top: 10px; font-family: monospace; font-size: 12px;">
+                    <div style="margin-bottom: 5px;">
+                        <strong>Folder:</strong> <span id="folderPreview" style="color: #007AFF;">-</span>
+                    </div>
+                    <div>
+                        <strong>File:</strong> <span id="filePreview" style="color: #007AFF;">-</span>
+                    </div>
+                </div>
             </div>
         </div>
 

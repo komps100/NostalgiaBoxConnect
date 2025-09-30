@@ -3,11 +3,22 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   selectOutputPath: () => ipcRenderer.invoke('select-output-path'),
   updateNamingConvention: (convention) => ipcRenderer.invoke('update-naming-convention', convention),
+  updateFolderNaming: (convention) => ipcRenderer.invoke('update-folder-naming', convention),
   updateRouterIP: (ip) => ipcRenderer.invoke('update-router-ip', ip),
+  updateEosIP: (ip) => ipcRenderer.invoke('update-eos-ip', ip),
+  updateTCPPort: (port) => ipcRenderer.invoke('update-tcp-port', port),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   captureStill: () => ipcRenderer.invoke('capture-still'),
   switchInput: (input, output) => ipcRenderer.invoke('switch-input', input, output),
   detectDevices: () => ipcRenderer.invoke('detect-devices'),
   selectDevice: (device) => ipcRenderer.invoke('select-device', device),
-  setFramerate: (framerate) => ipcRenderer.invoke('set-framerate', framerate)
+  setFramerate: (framerate) => ipcRenderer.invoke('set-framerate', framerate),
+  connectEos: () => ipcRenderer.invoke('connect-eos'),
+  disconnectEos: () => ipcRenderer.invoke('disconnect-eos'),
+  pingEos: () => ipcRenderer.invoke('ping-eos'),
+  startTCPServer: () => ipcRenderer.invoke('start-tcp-server'),
+  stopTCPServer: () => ipcRenderer.invoke('stop-tcp-server'),
+  getEosData: () => ipcRenderer.invoke('get-eos-data'),
+  onEosStatusUpdate: (callback) => ipcRenderer.on('eos-status-update', (event, data) => callback(data)),
+  onTCPServerStatus: (callback) => ipcRenderer.on('tcp-server-status', (event, data) => callback(data))
 });

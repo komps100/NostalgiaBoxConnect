@@ -1,13 +1,42 @@
 let currentSettings = {
     outputPath: '',
-    namingConvention: 'capture_{input}_{timestamp}',
-    routerIP: '10.101.130.101'
+    namingConvention: '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}',
+    folderNaming: '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}',
+    routerIP: '10.101.130.101',
+    eosIP: '',
+    tcpPort: 9999
+};
+
+let currentEosData = {
+    showName: '',
+    cueList: '',
+    cueListName: '',
+    cueLabel: '',
+    cueNumber: '',
+    connected: false
 };
 
 const elements = {
     currentPath: null,
     namingConvention: null,
+    folderNaming: null,
     routerIP: null,
+    eosIP: null,
+    tcpPort: null,
+    connectEos: null,
+    disconnectEos: null,
+    pingEos: null,
+    eosStatus: null,
+    eosDataDisplay: null,
+    eosShowValue: null,
+    eosCueListValue: null,
+    eosCueNumberValue: null,
+    eosCueLabelValue: null,
+    folderPreview: null,
+    filePreview: null,
+    startServer: null,
+    stopServer: null,
+    serverStatus: null,
     captureDevice: null,
     refreshDevices: null,
     previewContainer: null,
@@ -20,10 +49,70 @@ let previewStream = null;
 let isPreviewActive = false;
 let detectedFramerate = 30; // Default fallback
 
+// Helper functions for naming preview
+function sanitizeFilename(str) {
+    return str
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .replace(/,/g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+}
+
+function generatePreview(template, inputNumber, timestamp) {
+    const sanitizedInput = sanitizeFilename(String(inputNumber));
+    const sanitizedTimestamp = sanitizeFilename(timestamp);
+    const sanitizedCueList = sanitizeFilename(currentEosData.cueList || 'unknown');
+    const sanitizedCueListName = sanitizeFilename(currentEosData.cueListName || currentEosData.cueList || 'unknown');
+    const sanitizedCueLabel = sanitizeFilename(currentEosData.cueLabel || 'unknown');
+    const sanitizedCueNumber = sanitizeFilename(currentEosData.cueNumber || 'unknown');
+    const sanitizedShowName = sanitizeFilename(currentEosData.showName || 'unknown');
+
+    let result = template
+        .replace('{input}', sanitizedInput)
+        .replace('{timestamp}', sanitizedTimestamp)
+        .replace('{eosCueList}', sanitizedCueList)
+        .replace('{eosCueListName}', sanitizedCueListName)
+        .replace('{eosCueLabel}', sanitizedCueLabel)
+        .replace('{eosCueNumber}', sanitizedCueNumber)
+        .replace('{eosShowName}', sanitizedShowName);
+
+    return sanitizeFilename(result);
+}
+
+function updateNamingPreviews() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const folderTemplate = elements.folderNaming.value || '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}';
+    const fileTemplate = elements.namingConvention.value || '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}';
+
+    const folderPreview = generatePreview(folderTemplate, 'current', timestamp);
+    const filePreview = generatePreview(fileTemplate, 'current', timestamp) + '.png';
+
+    elements.folderPreview.textContent = folderPreview || '(empty)';
+    elements.filePreview.textContent = filePreview || '(empty)';
+}
+
 function initElements() {
     elements.currentPath = document.getElementById('currentPath');
     elements.namingConvention = document.getElementById('namingConvention');
+    elements.folderNaming = document.getElementById('folderNaming');
     elements.routerIP = document.getElementById('routerIP');
+    elements.eosIP = document.getElementById('eosIP');
+    elements.tcpPort = document.getElementById('tcpPort');
+    elements.connectEos = document.getElementById('connectEos');
+    elements.disconnectEos = document.getElementById('disconnectEos');
+    elements.pingEos = document.getElementById('pingEos');
+    elements.eosStatus = document.getElementById('eosStatus');
+    elements.eosDataDisplay = document.getElementById('eosDataDisplay');
+    elements.eosShowValue = document.getElementById('eosShowValue');
+    elements.eosCueListValue = document.getElementById('eosCueListValue');
+    elements.eosCueNumberValue = document.getElementById('eosCueNumberValue');
+    elements.eosCueLabelValue = document.getElementById('eosCueLabelValue');
+    elements.folderPreview = document.getElementById('folderPreview');
+    elements.filePreview = document.getElementById('filePreview');
+    elements.startServer = document.getElementById('startServer');
+    elements.stopServer = document.getElementById('stopServer');
+    elements.serverStatus = document.getElementById('serverStatus');
     elements.captureDevice = document.getElementById('captureDevice');
     elements.refreshDevices = document.getElementById('refreshDevices');
     elements.previewContainer = document.getElementById('previewContainer');
@@ -37,7 +126,13 @@ async function loadSettings() {
         currentSettings = await window.electronAPI.getSettings();
         elements.currentPath.textContent = currentSettings.outputPath || 'No folder selected';
         elements.namingConvention.value = currentSettings.namingConvention;
+        elements.folderNaming.value = currentSettings.folderNaming;
         elements.routerIP.value = currentSettings.routerIP;
+        elements.eosIP.value = currentSettings.eosIP || '';
+        elements.tcpPort.value = currentSettings.tcpPort || 9999;
+
+        // Initialize naming preview
+        updateNamingPreviews();
     } catch (error) {
         showStatus('Failed to load settings', 'error');
     }
@@ -99,6 +194,17 @@ async function captureNow() {
     }
 }
 
+async function updateFolderNaming() {
+    const convention = elements.folderNaming.value;
+    try {
+        await window.electronAPI.updateFolderNaming(convention);
+        currentSettings.folderNaming = convention;
+        showStatus('Folder naming updated', 'success');
+    } catch (error) {
+        showStatus('Failed to update folder naming', 'error');
+    }
+}
+
 async function updateRouterIP() {
     const ip = elements.routerIP.value;
     try {
@@ -107,6 +213,132 @@ async function updateRouterIP() {
         showStatus('Router IP updated', 'success');
     } catch (error) {
         showStatus('Failed to update router IP', 'error');
+    }
+}
+
+async function updateEosIP() {
+    const ip = elements.eosIP.value;
+    try {
+        await window.electronAPI.updateEosIP(ip);
+        currentSettings.eosIP = ip;
+        showStatus('Eos IP updated', 'success');
+    } catch (error) {
+        showStatus('Failed to update Eos IP', 'error');
+    }
+}
+
+async function updateTCPPort() {
+    const port = parseInt(elements.tcpPort.value);
+    try {
+        await window.electronAPI.updateTCPPort(port);
+        currentSettings.tcpPort = port;
+        showStatus('TCP port updated', 'success');
+    } catch (error) {
+        showStatus('Failed to update TCP port', 'error');
+    }
+}
+
+async function connectEos() {
+    if (!currentSettings.eosIP) {
+        showStatus('Please enter Eos IP address first', 'error');
+        return;
+    }
+
+    showStatus('Connecting to Eos...', 'info');
+    try {
+        const result = await window.electronAPI.connectEos();
+        if (result.success) {
+            elements.connectEos.disabled = true;
+            elements.disconnectEos.disabled = false;
+            elements.pingEos.disabled = false;
+            elements.eosStatus.textContent = 'Connected to Eos - Listening for cue data...';
+            elements.eosStatus.className = 'preview-status active';
+            elements.eosDataDisplay.style.display = 'block';
+            showStatus('Connected to Eos console', 'success');
+
+            // Get initial data
+            updateEosDataDisplay();
+        } else {
+            elements.eosStatus.textContent = `Connection failed: ${result.error}`;
+            elements.eosStatus.className = 'preview-status error';
+            showStatus(`Failed to connect to Eos: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showStatus('Failed to connect to Eos', 'error');
+    }
+}
+
+async function disconnectEos() {
+    try {
+        await window.electronAPI.disconnectEos();
+        elements.connectEos.disabled = false;
+        elements.disconnectEos.disabled = true;
+        elements.pingEos.disabled = true;
+        elements.eosStatus.textContent = 'Disconnected';
+        elements.eosStatus.className = 'preview-status';
+        elements.eosDataDisplay.style.display = 'none';
+        showStatus('Disconnected from Eos', 'success');
+    } catch (error) {
+        showStatus('Failed to disconnect from Eos', 'error');
+    }
+}
+
+async function pingEos() {
+    try {
+        showStatus('Sending ping to Eos...', 'info');
+        const result = await window.electronAPI.pingEos();
+        if (result.success) {
+            showStatus('Ping sent to Eos console', 'success');
+        } else {
+            showStatus(`Ping failed: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showStatus('Failed to ping Eos', 'error');
+    }
+}
+
+async function updateEosDataDisplay() {
+    try {
+        const eosData = await window.electronAPI.getEosData();
+        elements.eosShowValue.textContent = eosData.showName || '-';
+        elements.eosCueListValue.textContent = eosData.cueList || '-';
+        elements.eosCueNumberValue.textContent = eosData.cueNumber || '-';
+        elements.eosCueLabelValue.textContent = eosData.cueLabel || '-';
+    } catch (error) {
+        console.error('Failed to update Eos data display:', error);
+    }
+}
+
+async function startTCPServer() {
+    showStatus('Starting TCP server...', 'info');
+    try {
+        const result = await window.electronAPI.startTCPServer();
+        if (result.success) {
+            elements.startServer.disabled = true;
+            elements.stopServer.disabled = false;
+            elements.serverStatus.textContent = `Server running on port ${result.port}`;
+            elements.serverStatus.className = 'preview-status active';
+            showStatus(`TCP server started on port ${result.port}`, 'success');
+        } else {
+            elements.serverStatus.textContent = `Failed to start: ${result.error}`;
+            elements.serverStatus.className = 'preview-status error';
+            showStatus(`Failed to start TCP server: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showStatus('Failed to start TCP server', 'error');
+    }
+}
+
+async function stopTCPServer() {
+    try {
+        await window.electronAPI.stopTCPServer();
+        elements.startServer.disabled = false;
+        elements.stopServer.disabled = true;
+        elements.serverStatus.textContent = 'Server stopped';
+        elements.serverStatus.className = 'preview-status';
+        showStatus('TCP server stopped', 'success');
+    } catch (error) {
+        showStatus('Failed to stop TCP server', 'error');
     }
 }
 
@@ -359,9 +591,64 @@ async function onDeviceChange() {
 function initEventListeners() {
     document.getElementById('selectPath').addEventListener('click', selectOutputPath);
     elements.namingConvention.addEventListener('change', updateNamingConvention);
+    elements.folderNaming.addEventListener('change', updateFolderNaming);
     elements.routerIP.addEventListener('change', updateRouterIP);
+    elements.eosIP.addEventListener('change', updateEosIP);
+    elements.tcpPort.addEventListener('change', updateTCPPort);
+    elements.connectEos.addEventListener('click', connectEos);
+    elements.disconnectEos.addEventListener('click', disconnectEos);
+    elements.pingEos.addEventListener('click', pingEos);
+    elements.startServer.addEventListener('click', startTCPServer);
+    elements.stopServer.addEventListener('click', stopTCPServer);
     elements.captureDevice.addEventListener('change', onDeviceChange);
     elements.refreshDevices.addEventListener('click', refreshDevices);
+
+    // Update preview when naming conventions change
+    elements.namingConvention.addEventListener('input', updateNamingPreviews);
+    elements.folderNaming.addEventListener('input', updateNamingPreviews);
+
+    // Listen for Eos status updates from main process
+    window.electronAPI.onEosStatusUpdate((eosData) => {
+        console.log('Eos status update received:', eosData);
+
+        // Update currentEosData tracking
+        currentEosData = { ...eosData };
+
+        if (eosData.connected) {
+            let statusText = `Connected | Cue List: ${eosData.cueList || 'N/A'} | Cue: ${eosData.cueNumber || 'N/A'} | Label: ${eosData.cueLabel || 'N/A'}`;
+            elements.eosStatus.textContent = statusText;
+            elements.eosStatus.className = 'preview-status active';
+
+            // Update the data display
+            elements.eosShowValue.textContent = eosData.showName || '-';
+            elements.eosCueListValue.textContent = eosData.cueList || '-';
+            elements.eosCueNumberValue.textContent = eosData.cueNumber || '-';
+            elements.eosCueLabelValue.textContent = eosData.cueLabel || '-';
+        }
+
+        // Update naming preview with new Eos data
+        updateNamingPreviews();
+    });
+
+    // Listen for TCP server status updates
+    window.electronAPI.onTCPServerStatus((status) => {
+        if (status.running) {
+            elements.startServer.disabled = true;
+            elements.stopServer.disabled = false;
+            elements.serverStatus.textContent = `Server running on port ${status.port}`;
+            elements.serverStatus.className = 'preview-status active';
+        } else {
+            elements.startServer.disabled = false;
+            elements.stopServer.disabled = true;
+            if (status.error) {
+                elements.serverStatus.textContent = `Error: ${status.error}`;
+                elements.serverStatus.className = 'preview-status error';
+            } else {
+                elements.serverStatus.textContent = 'Server stopped';
+                elements.serverStatus.className = 'preview-status';
+            }
+        }
+    });
 }
 
 async function init() {
