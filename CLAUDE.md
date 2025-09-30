@@ -3,8 +3,8 @@
 ## Project Overview
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
-## Current Status: ✅ WORKING (v1.1.0)
-Full integration complete. Capture, preview, ETC Eos OSC integration, and Stream Deck automation working.
+## Current Status: ⚠️ MOSTLY WORKING (v1.1.0)
+Capture, preview, router switching, ETC Eos OSC integration (TCP-only), and Stream Deck automation working. Naming system preview added but needs refinement.
 
 ## Features Implemented
 
@@ -27,7 +27,8 @@ Full integration complete. Capture, preview, ETC Eos OSC integration, and Stream
   - `{input}` - Input number (1-6)
   - `{timestamp}` - Current date/time
   - `{eosCueList}` - ETC Eos cue list number
-  - `{eosCueLabel}` - ETC Eos cue label/name
+  - `{eosCueListName}` - ETC Eos cue list name (text label)
+  - `{eosCueLabel}` - ETC Eos cue label/name (clean text only)
   - `{eosCueNumber}` - ETC Eos cue number
   - `{eosShowName}` - ETC Eos show name
 
@@ -62,15 +63,18 @@ Full integration complete. Capture, preview, ETC Eos OSC integration, and Stream
 - Native resolution capture (format/resolution/framerate agnostic)
 
 ### ✅ ETC Eos Integration (NEW in v1.1.0)
-- **OSC Communication**: Connects to ETC Eos consoles via OSC over TCP (port 3032)
+- **OSC Communication**: Connects to ETC Eos consoles via OSC over TCP only (port 3032)
+- **TCP-Only Protocol**: Uses raw TCP sockets with OSC packet-length framing (no UDP)
 - **Real-time Data**: Subscribes to active cue information
+- **OSC Get Commands**: Retrieves clean text labels using `/eos/get/cuelist/` and `/eos/get/cue/`
 - **Variables Available**:
   - Show name
-  - Cue list number
-  - Cue number
-  - Cue label/name
+  - Cue list number and name (text label)
+  - Cue number and label (clean text only, no formatting)
 - **UI Status Display**: Real-time connection status and cue information
 - **File Naming Integration**: All Eos variables available in file/folder naming
+- **Naming Preview**: Live preview of folder/file names with current Eos data
+- **Filename Sanitization**: Automatically removes invalid characters from all variables
 
 ### ✅ Stream Deck Companion Integration (NEW in v1.1.0)
 - **TCP Server**: Listens for commands from Stream Deck Companion
@@ -100,7 +104,8 @@ Full integration complete. Capture, preview, ETC Eos OSC integration, and Stream
 
 ### Dependencies
 - `electron` - Application framework
-- `node-osc` - OSC message handling
+- `node-osc` - OSC message handling (legacy, kept for compatibility)
+- `osc` - OSC packet encoding/decoding for TCP-only communication
 - `electron-builder` - Packaging system
 
 ### Hardware Requirements
@@ -160,15 +165,21 @@ npm run build      # Build distributable .app
 - Device name matching between FFmpeg and browser getUserMedia APIs
 
 ### ETC Eos OSC Integration
-- **Protocol**: OSC over TCP (port 3032 for sending, port 3033 for receiving)
-- **Connection**: Uses `node-osc` library for OSC client/server
-- **Subscription**: Sends `/eos/subscribe=1` to receive updates
+- **Protocol**: OSC over TCP only (port 3032, bidirectional)
+- **Connection**: Raw `net.Socket()` with manual OSC packet-length framing (OSC 1.0 spec)
+- **Framing**: 4-byte big-endian length header + OSC packet data
+- **Packet Encoding**: Uses `osc` library for writePacket/readPacket
+- **Subscription**: Sends `/eos/subscribe` with argument `1` to receive updates
+- **OSC Get Commands**: Sends `/eos/get/cuelist/{number}` and `/eos/get/cue/{list}/{number}` for clean labels
 - **Monitored Paths**:
-  - `/eos/out/active/cue/text` - Active cue label
+  - `/eos/out/active/cue/text` - Active cue formatted text (parsed for clean label)
   - `/eos/out/active/cue/{list}/{number}` - Cue list and number
   - `/eos/out/show/name` - Show name
+  - `/eos/out/get/cuelist/{number}` - Cue list name response
+  - `/eos/out/get/cue/{list}/{number}` - Cue label response
 - **State Tracking**: Real-time updates sent to renderer via IPC
 - **Variable Replacement**: Replaces variables in file/folder names during capture
+- **Filename Sanitization**: Removes invalid characters: `/ \ : * ? " < > | ,` and whitespace
 - **Fallback Values**: Uses "unknown" if Eos not connected or data unavailable
 
 ### Stream Deck TCP Server
@@ -189,8 +200,8 @@ npm run build      # Build distributable .app
 - **Variable Replacement Order**: Applied during capture, not configuration
 - **Folder Creation**: Automatic recursive folder creation (mkdir -p equivalent)
 - **Default Templates**:
-  - Folder: `{eosCueList}_{timestamp}_{eosCueLabel}_{eosCueNumber}`
-  - File: `{eosCueList}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}`
+  - Folder: `{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}`
+  - File: `{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}`
 - **Output Format**: PNG images with native resolution
 
 ## Future Enhancements
@@ -272,4 +283,11 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.1.0 - Full integration complete. ETC Eos OSC and Stream Deck automation working. All core functionality operational.
+v1.1.0 - Eos OSC (TCP-only) and Stream Deck integration working. Capture and router switching confirmed working. Naming system has preview feature but needs refinement.
+
+## Known Issues
+- ⚠️ **Naming System**: Preview feature added but needs testing and possible refinement
+- ✅ **Capture**: Confirmed working
+- ✅ **Router Switching**: Confirmed working
+- ✅ **Eos OSC**: TCP-only communication working, clean labels retrieved via OSC Get commands
+- ✅ **Filename Sanitization**: Implemented for all variables and final paths
