@@ -297,15 +297,16 @@
             <div id="currentPath" class="path-display">No folder selected</div>
 
             <label for="folderNaming">Folder Naming Convention:</label>
-            <input type="text" id="folderNaming" placeholder="{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}" value="{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}">
+            <input type="text" id="folderNaming" placeholder="{date}_{eosCueListName}_{eosCueLabel}" value="{date}_{eosCueListName}_{eosCueLabel}">
             <div class="help-text">
-                Variables: {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {timestamp}
+                Variables: {date}, {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {timestamp}
             </div>
 
             <label for="namingConvention">File Naming Convention:</label>
-            <input type="text" id="namingConvention" placeholder="{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}" value="{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}">
+            <input type="text" id="namingConvention" placeholder="{date}_{eosCueListName}_{eosCueLabel}_{input}" value="{date}_{eosCueListName}_{eosCueLabel}_{input}">
             <div class="help-text">
-                Variables: {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {input}, {timestamp}
+                Variables: {date}, {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {input}, {timestamp}<br>
+                {date} = Date only in YYYYMMDD format (e.g., 20250930)
             </div>
 
             <div style="margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 4px;">

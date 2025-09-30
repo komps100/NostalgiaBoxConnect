@@ -24,10 +24,13 @@ let eosData = {
   connected: false
 };
 
+// Track pending OSC Get requests to ensure sequential flow
+let pendingCueRequest = null; // { cueList, cueNumber }
+
 let settings = {
   outputPath: process.cwd(),
-  namingConvention: '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}',
-  folderNaming: '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}',
+  namingConvention: '{date}_{eosCueListName}_{eosCueLabel}_{input}',
+  folderNaming: '{date}_{eosCueListName}_{eosCueLabel}',
   routerIP: '10.101.130.101',
   eosIP: '',
   tcpPort: 9999,
@@ -43,10 +46,10 @@ function loadSettings() {
 
       // Force defaults if naming conventions are empty
       if (!settings.namingConvention || settings.namingConvention.trim() === '') {
-        settings.namingConvention = '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}';
+        settings.namingConvention = '{date}_{eosCueListName}_{eosCueLabel}_{input}';
       }
       if (!settings.folderNaming || settings.folderNaming.trim() === '') {
-        settings.folderNaming = '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}';
+        settings.folderNaming = '{date}_{eosCueListName}_{eosCueLabel}';
       }
 
       console.log('Settings loaded:', settings);
@@ -358,6 +361,7 @@ function disconnectFromEos() {
       eosData.cueListName = '';
       eosData.cueLabel = '';
       eosData.cueNumber = '';
+      pendingCueRequest = null; // Clear any pending requests
 
       sendEosStatusUpdate();
       console.log('=== EOS DISCONNECTED ===');
@@ -434,15 +438,14 @@ function handleEosMessage(oscMsg) {
     eosData.cueNumber = cueNumber;
     console.log(`→ Active Cue: List ${cueList}, Number ${cueNumber}`);
 
-    // Request clean cue list name and cue label using OSC Get
+    // Sequential OSC Get flow: first get cuelist, then get cue
     if (oscTCPPort && cueList) {
-      console.log(`Requesting cue list name for list ${cueList}`);
-      sendOscMessage(oscTCPPort, `/eos/get/cuelist/${cueList}`, []);
+      // Store the pending cue request for when cuelist response arrives
+      pendingCueRequest = { cueList, cueNumber };
 
-      if (cueNumber) {
-        console.log(`Requesting cue label for ${cueList}/${cueNumber}`);
-        sendOscMessage(oscTCPPort, `/eos/get/cue/${cueList}/${cueNumber}`, []);
-      }
+      console.log(`→ Requesting cue list name for list ${cueList}`);
+      sendOscMessage(oscTCPPort, `/eos/get/cuelist/${cueList}`, []);
+      // Note: We'll send get/cue AFTER receiving the cuelist response
     }
 
     dataUpdated = true;
@@ -455,20 +458,30 @@ function handleEosMessage(oscMsg) {
   else if (address.match(/\/eos\/out\/get\/cuelist\/\d+/)) {
     // Response from /eos/get/cuelist/{number}
     // Format: /eos/out/get/cuelist/{number}
-    // Args: [index, number, uid, label, ...]
-    if (argValues.length >= 4) {
-      const cueListLabel = argValues[3];
+    // Args: [index, uid, label, role_user, ...]
+    if (argValues.length >= 3) {
+      const cueListLabel = argValues[2];
       console.log('→ Cue List Name:', cueListLabel);
       eosData.cueListName = cueListLabel || '';
       dataUpdated = true;
+
+      // Now that we have the cuelist response, send the pending cue request
+      if (pendingCueRequest && oscTCPPort) {
+        const { cueList, cueNumber } = pendingCueRequest;
+        if (cueNumber) {
+          console.log(`→ Now requesting cue label for ${cueList}/${cueNumber}`);
+          sendOscMessage(oscTCPPort, `/eos/get/cue/${cueList}/${cueNumber}`, []);
+        }
+        pendingCueRequest = null; // Clear pending request
+      }
     }
   }
   else if (address.match(/\/eos\/out\/get\/cue\/\d+\//)) {
     // Response from /eos/get/cue/{list}/{number}
-    // Format: /eos/out/get/cue/{list}/{number}
-    // Args: [index, list, number, uid, label, ...]
-    if (argValues.length >= 5) {
-      const cueLabel = argValues[4];
+    // Format: /eos/out/get/cue/{list}/{number}/0/list/0/{count}
+    // Args: [index, uid, label, uptime, downtime, ...]
+    if (argValues.length >= 3) {
+      const cueLabel = argValues[2]; // Label is at index 2
       console.log('→ Clean Cue Label from Get:', cueLabel);
       eosData.cueLabel = cueLabel || '';
       dataUpdated = true;
@@ -844,16 +857,21 @@ function sanitizeFilename(str) {
   // Remove or replace characters that are invalid in filenames
   return str
     .replace(/[<>:"/\\|?*]/g, '_')  // Replace invalid chars with underscore
-    .replace(/,/g, '_')              // Replace commas with underscore
-    .replace(/\s+/g, '_')            // Replace whitespace with underscore
-    .replace(/_+/g, '_')             // Collapse multiple underscores
-    .replace(/^_|_$/g, '');          // Trim underscores from start/end
+    .replace(/,/g, '_');             // Replace commas with underscore
 }
 
 function replaceCaptureVariables(template, inputNumber, timestamp) {
   // Sanitize each value before replacing
   const sanitizedInput = sanitizeFilename(String(inputNumber));
   const sanitizedTimestamp = sanitizeFilename(timestamp);
+
+  // Generate date-only string in YYYYMMDD format
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const dateOnly = `${year}${month}${day}`;
+
   const sanitizedCueList = sanitizeFilename(eosData.cueList || 'unknown');
   const sanitizedCueListName = sanitizeFilename(eosData.cueListName || eosData.cueList || 'unknown');
   const sanitizedCueLabel = sanitizeFilename(eosData.cueLabel || 'unknown');
@@ -863,6 +881,7 @@ function replaceCaptureVariables(template, inputNumber, timestamp) {
   return template
     .replace('{input}', sanitizedInput)
     .replace('{timestamp}', sanitizedTimestamp)
+    .replace('{date}', dateOnly)                         // Date only YYYYMMDD
     .replace('{eosCueList}', sanitizedCueList)           // Cue list number
     .replace('{eosCueListName}', sanitizedCueListName)   // Cue list name
     .replace('{eosCueLabel}', sanitizedCueLabel)

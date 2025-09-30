@@ -1,7 +1,7 @@
 let currentSettings = {
     outputPath: '',
-    namingConvention: '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}',
-    folderNaming: '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}',
+    namingConvention: '{date}_{eosCueListName}_{eosCueLabel}_{input}',
+    folderNaming: '{date}_{eosCueListName}_{eosCueLabel}',
     routerIP: '10.101.130.101',
     eosIP: '',
     tcpPort: 9999
@@ -53,15 +53,20 @@ let detectedFramerate = 30; // Default fallback
 function sanitizeFilename(str) {
     return str
         .replace(/[<>:"/\\|?*]/g, '_')
-        .replace(/,/g, '_')
-        .replace(/\s+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '');
+        .replace(/,/g, '_');
 }
 
 function generatePreview(template, inputNumber, timestamp) {
     const sanitizedInput = sanitizeFilename(String(inputNumber));
     const sanitizedTimestamp = sanitizeFilename(timestamp);
+
+    // Generate date-only string in YYYYMMDD format
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateOnly = `${year}${month}${day}`;
+
     const sanitizedCueList = sanitizeFilename(currentEosData.cueList || 'unknown');
     const sanitizedCueListName = sanitizeFilename(currentEosData.cueListName || currentEosData.cueList || 'unknown');
     const sanitizedCueLabel = sanitizeFilename(currentEosData.cueLabel || 'unknown');
@@ -71,6 +76,7 @@ function generatePreview(template, inputNumber, timestamp) {
     let result = template
         .replace('{input}', sanitizedInput)
         .replace('{timestamp}', sanitizedTimestamp)
+        .replace('{date}', dateOnly)
         .replace('{eosCueList}', sanitizedCueList)
         .replace('{eosCueListName}', sanitizedCueListName)
         .replace('{eosCueLabel}', sanitizedCueLabel)
@@ -82,8 +88,8 @@ function generatePreview(template, inputNumber, timestamp) {
 
 function updateNamingPreviews() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const folderTemplate = elements.folderNaming.value || '{eosCueListName}_{timestamp}_{eosCueLabel}_{eosCueNumber}';
-    const fileTemplate = elements.namingConvention.value || '{eosCueListName}_{timestamp}_{input}_{eosCueLabel}_{eosCueNumber}';
+    const folderTemplate = elements.folderNaming.value || '{date}_{eosCueListName}_{eosCueLabel}';
+    const fileTemplate = elements.namingConvention.value || '{date}_{eosCueListName}_{eosCueLabel}_{input}';
 
     const folderPreview = generatePreview(folderTemplate, 'current', timestamp);
     const filePreview = generatePreview(fileTemplate, 'current', timestamp) + '.png';
