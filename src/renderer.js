@@ -24,6 +24,7 @@ const elements = {
     currentStitchedPath: null,
     namingConvention: null,
     folderNaming: null,
+    stitchLayoutMode: null,
     routerIP: null,
     eosIP: null,
     tcpPort: null,
@@ -107,6 +108,7 @@ function initElements() {
     elements.currentStitchedPath = document.getElementById('currentStitchedPath');
     elements.namingConvention = document.getElementById('namingConvention');
     elements.folderNaming = document.getElementById('folderNaming');
+    elements.stitchLayoutMode = document.getElementById('stitchLayoutMode');
     elements.routerIP = document.getElementById('routerIP');
     elements.eosIP = document.getElementById('eosIP');
     elements.tcpPort = document.getElementById('tcpPort');
@@ -139,6 +141,7 @@ async function loadSettings() {
         elements.currentStitchedPath.textContent = currentSettings.stitchedOutputPath || 'No folder selected';
         elements.namingConvention.value = currentSettings.namingConvention;
         elements.folderNaming.value = currentSettings.folderNaming;
+        elements.stitchLayoutMode.value = currentSettings.stitchLayoutMode || 'auto';
         elements.routerIP.value = currentSettings.routerIP;
         elements.eosIP.value = currentSettings.eosIP || '';
         elements.tcpPort.value = currentSettings.tcpPort || 9999;
@@ -218,6 +221,17 @@ async function updateFolderNaming() {
         showStatus('Folder naming updated', 'success');
     } catch (error) {
         showStatus('Failed to update folder naming', 'error');
+    }
+}
+
+async function updateStitchLayoutMode() {
+    const mode = elements.stitchLayoutMode.value;
+    try {
+        await window.electronAPI.updateStitchLayoutMode(mode);
+        currentSettings.stitchLayoutMode = mode;
+        showStatus(`Stitch layout mode set to: ${mode}`, 'success');
+    } catch (error) {
+        showStatus('Failed to update stitch layout mode', 'error');
     }
 }
 
@@ -669,6 +683,7 @@ function initEventListeners() {
     document.getElementById('selectStitchedPath').addEventListener('click', selectStitchedOutputPath);
     elements.namingConvention.addEventListener('change', updateNamingConvention);
     elements.folderNaming.addEventListener('change', updateFolderNaming);
+    elements.stitchLayoutMode.addEventListener('change', updateStitchLayoutMode);
     elements.routerIP.addEventListener('change', updateRouterIP);
     elements.eosIP.addEventListener('change', updateEosIP);
     elements.tcpPort.addEventListener('change', updateTCPPort);

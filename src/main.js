@@ -36,7 +36,8 @@ let settings = {
   eosIP: '',
   tcpPort: 9999,
   selectedDevice: null,
-  detectedFramerate: 30
+  detectedFramerate: 30,
+  stitchLayoutMode: 'auto'  // 'auto' or 'line'
 };
 
 // EOS reconnection tracking
@@ -192,6 +193,12 @@ ipcMain.handle('update-tcp-port', async (event, port) => {
 
 ipcMain.handle('update-folder-naming', async (event, convention) => {
   settings.folderNaming = convention;
+  saveSettings();
+  return true;
+});
+
+ipcMain.handle('update-stitch-layout-mode', async (event, mode) => {
+  settings.stitchLayoutMode = mode;
   saveSettings();
   return true;
 });
@@ -733,7 +740,10 @@ async function handleSequenceCommand(command, socket) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputs[0], timestamp);
     const folderName = sanitizeFilename(folderNameRaw);
-    const captureFolder = path.join(settings.outputPath, folderName);
+    const baseCaptureFolder = path.join(settings.outputPath, folderName);
+
+    // Get unique folder path (adds (2), (3), etc. if folder exists)
+    const captureFolder = getUniqueFolderPath(baseCaptureFolder);
 
     // Create folder if it doesn't exist
     if (!fs.existsSync(captureFolder)) {
@@ -781,6 +791,10 @@ async function handleSequenceCommand(command, socket) {
       }
     }
 
+    // Switch back to input 1
+    socket.write(`Switching back to input 1...\n`);
+    await setVideohubInput(1, 1);
+
     socket.write(`Sequence complete!\n`);
     isSequenceRunning = false;
 
@@ -813,7 +827,10 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputs[0], timestamp);
     const folderName = sanitizeFilename(folderNameRaw);
-    const captureFolder = path.join(settings.outputPath, folderName);
+    const baseCaptureFolder = path.join(settings.outputPath, folderName);
+
+    // Get unique folder path (adds (2), (3), etc. if folder exists)
+    const captureFolder = getUniqueFolderPath(baseCaptureFolder);
 
     // Create folder if it doesn't exist
     if (!fs.existsSync(captureFolder)) {
@@ -866,6 +883,10 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
         sendSequenceProgress(`⚠ Stitch failed: ${stitchResult.error}`, 'error');
       }
     }
+
+    // Switch back to input 1
+    sendSequenceProgress('Switching back to Input 1...', 'info');
+    await setVideohubInput(1, 1);
 
     return {
       success: true,
@@ -1003,11 +1024,14 @@ async function stitchImages(folderPath) {
 
       console.log(`Found ${files.length} images to stitch`);
 
-      // Get folder name for output filename
+      // Get folder name for output filename (no "_stitched" suffix)
       const folderName = path.basename(folderPath);
       const outputPath = settings.stitchedOutputPath || settings.outputPath;
-      const outputFilename = `${folderName}_stitched.png`;
-      const outputFilePath = path.join(outputPath, outputFilename);
+      const outputFilename = `${folderName}.png`;
+      const baseOutputFilePath = path.join(outputPath, outputFilename);
+
+      // Get unique file path (adds _(2), _(3), etc. if file exists)
+      const outputFilePath = getUniqueFilePath(baseOutputFilePath);
 
       // Build FFmpeg command for horizontal stitching
       const inputFiles = files.map(f => path.join(folderPath, f));
@@ -1024,42 +1048,88 @@ async function stitchImages(folderPath) {
         inputs += `-i "${file}" `;
       });
 
-      // Simple horizontal stacking for all images
-      if (files.length === 1) {
-        // Just copy single image
-        filterComplex = '[0:v]copy[out]';
-      } else if (files.length === 2) {
-        filterComplex = '[0:v][1:v]hstack=inputs=2[out]';
-      } else if (files.length <= 6) {
-        // Horizontal stack for 3-6 images
-        filterComplex = '';
-        for (let i = 0; i < files.length; i++) {
-          filterComplex += `[${i}:v]`;
-        }
-        filterComplex += `hstack=inputs=${files.length}[out]`;
-      } else {
-        // Grid layout for more than 6 images
-        const rows = Math.ceil(files.length / imagesPerRow);
-        let rowFilters = [];
+      // Choose layout based on mode
+      if (settings.stitchLayoutMode === 'auto') {
+        // Auto layout based on number of images
+        if (files.length === 1) {
+          // Just copy single image
+          filterComplex = '[0:v]copy[out]';
+        } else if (files.length === 2) {
+          // 2 side by side
+          filterComplex = '[0:v][1:v]hstack=inputs=2[out]';
+        } else if (files.length === 3) {
+          // 2 top, 1 centered bottom
+          filterComplex = '[0:v][1:v]hstack=inputs=2[top];[top][2:v]vstack=inputs=2[out]';
+        } else if (files.length === 4) {
+          // 2x2 grid
+          filterComplex = '[0:v][1:v]hstack=inputs=2[top];[2:v][3:v]hstack=inputs=2[bottom];[top][bottom]vstack=inputs=2[out]';
+        } else if (files.length === 5) {
+          // 3 top, 2 centered bottom
+          filterComplex = '[0:v][1:v][2:v]hstack=inputs=3[top];[3:v][4:v]hstack=inputs=2[bottom];[top][bottom]vstack=inputs=2[out]';
+        } else if (files.length === 6) {
+          // 3 top, 3 bottom
+          filterComplex = '[0:v][1:v][2:v]hstack=inputs=3[top];[3:v][4:v][5:v]hstack=inputs=3[bottom];[top][bottom]vstack=inputs=2[out]';
+        } else {
+          // Fallback to grid layout for more than 6 images
+          const rows = Math.ceil(files.length / imagesPerRow);
+          let rowFilters = [];
 
-        for (let row = 0; row < rows; row++) {
-          const startIdx = row * imagesPerRow;
-          const endIdx = Math.min(startIdx + imagesPerRow, files.length);
-          const imagesInRow = endIdx - startIdx;
+          for (let row = 0; row < rows; row++) {
+            const startIdx = row * imagesPerRow;
+            const endIdx = Math.min(startIdx + imagesPerRow, files.length);
+            const imagesInRow = endIdx - startIdx;
 
-          let rowFilter = '';
-          for (let i = startIdx; i < endIdx; i++) {
-            rowFilter += `[${i}:v]`;
+            let rowFilter = '';
+            for (let i = startIdx; i < endIdx; i++) {
+              rowFilter += `[${i}:v]`;
+            }
+            rowFilter += `hstack=inputs=${imagesInRow}[row${row}]`;
+            rowFilters.push(rowFilter);
           }
-          rowFilter += `hstack=inputs=${imagesInRow}[row${row}]`;
-          rowFilters.push(rowFilter);
-        }
 
-        filterComplex = rowFilters.join(';') + ';';
-        for (let row = 0; row < rows; row++) {
-          filterComplex += `[row${row}]`;
+          filterComplex = rowFilters.join(';') + ';';
+          for (let row = 0; row < rows; row++) {
+            filterComplex += `[row${row}]`;
+          }
+          filterComplex += `vstack=inputs=${rows}[out]`;
         }
-        filterComplex += `vstack=inputs=${rows}[out]`;
+      } else {
+        // Line mode - horizontal stacking for all images
+        if (files.length === 1) {
+          filterComplex = '[0:v]copy[out]';
+        } else if (files.length === 2) {
+          filterComplex = '[0:v][1:v]hstack=inputs=2[out]';
+        } else if (files.length <= 6) {
+          // Horizontal stack for 3-6 images
+          filterComplex = '';
+          for (let i = 0; i < files.length; i++) {
+            filterComplex += `[${i}:v]`;
+          }
+          filterComplex += `hstack=inputs=${files.length}[out]`;
+        } else {
+          // Grid layout for more than 6 images
+          const rows = Math.ceil(files.length / imagesPerRow);
+          let rowFilters = [];
+
+          for (let row = 0; row < rows; row++) {
+            const startIdx = row * imagesPerRow;
+            const endIdx = Math.min(startIdx + imagesPerRow, files.length);
+            const imagesInRow = endIdx - startIdx;
+
+            let rowFilter = '';
+            for (let i = startIdx; i < endIdx; i++) {
+              rowFilter += `[${i}:v]`;
+            }
+            rowFilter += `hstack=inputs=${imagesInRow}[row${row}]`;
+            rowFilters.push(rowFilter);
+          }
+
+          filterComplex = rowFilters.join(';') + ';';
+          for (let row = 0; row < rows; row++) {
+            filterComplex += `[row${row}]`;
+          }
+          filterComplex += `vstack=inputs=${rows}[out]`;
+        }
       }
 
       const command = `${ffmpegPath} ${inputs} -filter_complex "${filterComplex}" -map "[out]" -y "${outputFilePath}"`;
@@ -1285,7 +1355,10 @@ async function captureStill(inputNumber, providedCaptureFolder = null, providedT
       // Generate folder name with variable substitution and sanitize
       const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputNumber, timestamp);
       const folderName = sanitizeFilename(folderNameRaw);
-      captureFolder = path.join(settings.outputPath, folderName);
+      const baseCaptureFolder = path.join(settings.outputPath, folderName);
+
+      // Get unique folder path (adds (2), (3), etc. if folder exists)
+      captureFolder = getUniqueFolderPath(baseCaptureFolder);
       console.log(`Generated new capture folder: ${captureFolder}`);
     }
 
@@ -1315,6 +1388,44 @@ function sanitizeFilename(str) {
   return str
     .replace(/[<>:"/\\|?*]/g, '_')  // Replace invalid chars with underscore
     .replace(/,/g, '_');             // Replace commas with underscore
+}
+
+// Generate a unique folder path by adding (2), (3), etc. if folder exists
+function getUniqueFolderPath(basePath) {
+  if (!fs.existsSync(basePath)) {
+    return basePath;
+  }
+
+  let counter = 2;
+  let uniquePath = basePath;
+
+  while (fs.existsSync(uniquePath)) {
+    uniquePath = `${basePath} (${counter})`;
+    counter++;
+  }
+
+  return uniquePath;
+}
+
+// Generate a unique file path by adding _(2), _(3), etc. if file exists
+function getUniqueFilePath(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return filePath;
+  }
+
+  const dir = path.dirname(filePath);
+  const ext = path.extname(filePath);
+  const basename = path.basename(filePath, ext);
+
+  let counter = 2;
+  let uniquePath = filePath;
+
+  while (fs.existsSync(uniquePath)) {
+    uniquePath = path.join(dir, `${basename}_(${counter})${ext}`);
+    counter++;
+  }
+
+  return uniquePath;
 }
 
 function replaceCaptureVariables(template, inputNumber, timestamp) {

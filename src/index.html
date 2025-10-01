@@ -320,6 +320,16 @@
                     {date} = Date only in YYYYMMDD format (e.g., 20250930)
                 </div>
 
+                <label for="stitchLayoutMode" style="margin-top: 15px;">Stitch Layout Mode:</label>
+                <select id="stitchLayoutMode">
+                    <option value="auto">Auto (optimized grid based on image count)</option>
+                    <option value="line">Line (all images in a horizontal row)</option>
+                </select>
+                <div class="help-text">
+                    Auto mode: 1=single, 2=side-by-side, 3=2+1, 4=2x2, 5=3+2, 6=3x2<br>
+                    Line mode: All images in one horizontal row
+                </div>
+
                 <div style="margin-top: 20px; padding: 15px; background-color: #f0f0f0; border-radius: 4px;">
                     <strong>Preview with Current Eos Data:</strong>
                     <div style="margin-top: 10px; font-family: monospace; font-size: 12px;">

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectOutputPath: () => ipcRenderer.invoke('select-output-path'),
   updateNamingConvention: (convention) => ipcRenderer.invoke('update-naming-convention', convention),
   updateFolderNaming: (convention) => ipcRenderer.invoke('update-folder-naming', convention),
+  updateStitchLayoutMode: (mode) => ipcRenderer.invoke('update-stitch-layout-mode', mode),
   updateRouterIP: (ip) => ipcRenderer.invoke('update-router-ip', ip),
   updateEosIP: (ip) => ipcRenderer.invoke('update-eos-ip', ip),
   updateTCPPort: (port) => ipcRenderer.invoke('update-tcp-port', port),
