@@ -503,7 +503,7 @@ function initEventListeners() {
 
         if (eosData.connected) {
             const cueListName = eosData.cueListName || eosData.cueList || 'N/A';
-            let statusText = `Connected | Cue List: ${cueListName} | Cue: ${eosData.cueNumber || 'N/A'} | Label: ${eosData.cueLabel || 'N/A'}`;
+            let statusText = `Connected | Cue: ${eosData.cueNumber || 'N/A'} | Cue List Label: ${cueListName} | Label: ${eosData.cueLabel || 'N/A'}`;
             elements.eosStatus.textContent = statusText;
             elements.eosStatus.className = 'preview-status active';
         }
@@ -686,7 +686,10 @@ function stopParticleAnimation() {
 function updateDiagnostics() {
     const uptimeElement = document.getElementById('uptimeValue');
     const statusElement = document.getElementById('systemStatus');
-    const connectionElement = document.getElementById('connectionCount');
+    const statusDot = document.getElementById('statusDot');
+    const showNameElement = document.getElementById('showName');
+    const cueListDisplay = document.getElementById('cueListDisplay');
+    const cueDisplay = document.getElementById('cueDisplay');
 
     if (uptimeElement) {
         const uptime = Date.now() - appStartTime;
@@ -696,12 +699,37 @@ function updateDiagnostics() {
         uptimeElement.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
 
-    if (statusElement) {
-        statusElement.textContent = 'Active';
+    // Update status pill and dot based on connection status
+    if (statusElement && statusDot) {
+        if (currentEosData.connected && connectionCount > 0) {
+            statusElement.textContent = 'Active';
+            statusElement.style.color = '#34C759';
+            statusDot.style.backgroundColor = '#34C759';
+            statusDot.style.boxShadow = '0 0 6px #34C759';
+        } else if (connectionCount > 0) {
+            statusElement.textContent = 'Connecting';
+            statusElement.style.color = '#FF9500';
+            statusDot.style.backgroundColor = '#FF9500';
+            statusDot.style.boxShadow = '0 0 6px #FF9500';
+        } else {
+            statusElement.textContent = 'Inactive';
+            statusElement.style.color = '#FF3B30';
+            statusDot.style.backgroundColor = '#FF3B30';
+            statusDot.style.boxShadow = '0 0 6px #FF3B30';
+        }
     }
 
-    if (connectionElement) {
-        connectionElement.textContent = connectionCount;
+    // Update show name
+    if (showNameElement) {
+        showNameElement.textContent = currentEosData.showName || '-';
+    }
+
+    // Update cue list and cue display
+    if (cueListDisplay && cueDisplay) {
+        const cueListName = currentEosData.cueListName || currentEosData.cueList || '-';
+        const cueLabel = currentEosData.cueLabel || '-';
+        cueListDisplay.textContent = cueListName;
+        cueDisplay.textContent = cueLabel;
     }
 }
 
