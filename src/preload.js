@@ -20,10 +20,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopTCPServer: () => ipcRenderer.invoke('stop-tcp-server'),
   getEosData: () => ipcRenderer.invoke('get-eos-data'),
   runTestSequence: (inputs) => ipcRenderer.invoke('run-test-sequence', inputs),
-  updateStitchedOutputPath: (path) => ipcRenderer.invoke('update-stitched-output-path', path),
   stitchFolder: (folderPath) => ipcRenderer.invoke('stitch-folder', folderPath),
   stitchLatestFolder: () => ipcRenderer.invoke('stitch-latest-folder'),
   selectOutputPath: () => ipcRenderer.invoke('select-output-path'),
+  selectStitchedOutputPath: () => ipcRenderer.invoke('select-stitched-output-path'),
   onEosStatusUpdate: (callback) => ipcRenderer.on('eos-status-update', (event, data) => callback(data)),
   onTCPServerStatus: (callback) => ipcRenderer.on('tcp-server-status', (event, data) => callback(data)),
   onSequenceProgress: (callback) => ipcRenderer.on('sequence-progress', (event, data) => callback(data))

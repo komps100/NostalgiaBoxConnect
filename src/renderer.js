@@ -374,6 +374,9 @@ function showStatus(message, type) {
     elements.status.innerHTML = message;
     elements.status.className = `status ${type}`;
 
+    // Also update activity indicator
+    updateActivityIndicator(message);
+
     if (type === 'success' || type === 'info') {
         setTimeout(() => {
             elements.status.innerHTML = '';
@@ -384,6 +387,22 @@ function showStatus(message, type) {
             elements.status.innerHTML = '';
             elements.status.className = '';
         }, 15000);
+    }
+}
+
+function updateActivityIndicator(message) {
+    const indicator = document.getElementById('activityIndicator');
+    if (indicator) {
+        indicator.textContent = message;
+
+        // Add animation/pulse effect
+        indicator.style.opacity = '1';
+        indicator.style.transition = 'opacity 0.3s';
+
+        // Fade out after 10 seconds
+        setTimeout(() => {
+            indicator.style.opacity = '0.5';
+        }, 10000);
     }
 }
 
@@ -608,12 +627,12 @@ async function onDeviceChange() {
 
 async function selectStitchedOutputPath() {
     try {
-        const path = await window.electronAPI.selectOutputPath();
+        const path = await window.electronAPI.selectStitchedOutputPath();
         if (path) {
-            await window.electronAPI.updateStitchedOutputPath(path);
             currentSettings.stitchedOutputPath = path;
             elements.currentStitchedPath.textContent = path;
             showStatus('Stitched output path updated', 'success');
+            updateStatusIndicators();
         }
     } catch (error) {
         showStatus('Failed to select stitched output path', 'error');

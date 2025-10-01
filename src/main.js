@@ -113,13 +113,26 @@ app.on('activate', () => {
 
 ipcMain.handle('select-output-path', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory']
+    properties: ['openDirectory', 'createDirectory']
   });
 
   if (!result.canceled && result.filePaths.length > 0) {
     settings.outputPath = result.filePaths[0];
     saveSettings();
     return settings.outputPath;
+  }
+  return null;
+});
+
+ipcMain.handle('select-stitched-output-path', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory']
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    settings.stitchedOutputPath = result.filePaths[0];
+    saveSettings();
+    return result.filePaths[0];
   }
   return null;
 });
@@ -211,11 +224,6 @@ ipcMain.handle('run-test-sequence', async (event, inputs) => {
   return await runTestSequence(inputs);
 });
 
-ipcMain.handle('update-stitched-output-path', async (event, path) => {
-  settings.stitchedOutputPath = path;
-  saveSettings();
-  return true;
-});
 
 ipcMain.handle('stitch-folder', async (event, folderPath) => {
   return await stitchImages(folderPath);
@@ -274,6 +282,15 @@ function connectToEos() {
         }, 5000);
 
         sendEosStatusUpdate();
+
+        // Auto-start Stream Deck TCP server 5 seconds after EOS connection
+        setTimeout(() => {
+          if (eosData.connected && !tcpServer) {
+            console.log('Auto-starting TCP server 5s after EOS connection...');
+            startTCPServer();
+          }
+        }, 5000);
+
         resolve({ success: true });
       });
 
@@ -325,6 +342,12 @@ function connectToEos() {
         eosData.connected = false;
         oscTCPPort = null;
         sendEosStatusUpdate();
+
+        // Stop TCP server when EOS disconnects
+        if (tcpServer) {
+          console.log('Stopping TCP server due to EOS disconnect');
+          stopTCPServer();
+        }
 
         // Start auto-reconnect
         startEosAutoReconnect();
@@ -479,8 +502,14 @@ function handleEosMessage(oscMsg) {
       // Store the pending cue request for when cuelist response arrives
       pendingCueRequest = { cueList, cueNumber };
 
-      console.log(`→ Requesting cue list name for list ${cueList}`);
-      sendOscMessage(oscTCPPort, `/eos/get/cuelist/${cueList}`, []);
+      // Add delay before requesting cuelist to give console time to prepare data
+      console.log(`→ Waiting 500ms before requesting cue list info...`);
+      setTimeout(() => {
+        if (oscTCPPort) {
+          console.log(`→ Requesting cue list name for list ${cueList}`);
+          sendOscMessage(oscTCPPort, `/eos/get/cuelist/${cueList}`, []);
+        }
+      }, 500);
       // Note: We'll send get/cue AFTER receiving the cuelist response
     }
 
@@ -502,11 +531,17 @@ function handleEosMessage(oscMsg) {
       dataUpdated = true;
 
       // Now that we have the cuelist response, send the pending cue request
+      // Add delay to give console time to prepare cue data
       if (pendingCueRequest && oscTCPPort) {
         const { cueList, cueNumber } = pendingCueRequest;
         if (cueNumber) {
-          console.log(`→ Now requesting cue label for ${cueList}/${cueNumber}`);
-          sendOscMessage(oscTCPPort, `/eos/get/cue/${cueList}/${cueNumber}`, []);
+          console.log(`→ Waiting 500ms before requesting cue label...`);
+          setTimeout(() => {
+            if (oscTCPPort) {
+              console.log(`→ Now requesting cue label for ${cueList}/${cueNumber}`);
+              sendOscMessage(oscTCPPort, `/eos/get/cue/${cueList}/${cueNumber}`, []);
+            }
+          }, 500);
         }
         pendingCueRequest = null; // Clear pending request
       }
@@ -572,6 +607,14 @@ function startEosAutoReconnect() {
       if (result.success) {
         console.log('EOS auto-reconnect successful');
         eosReconnectStartTime = null;
+
+        // Auto-start TCP server 5 seconds after successful reconnect
+        setTimeout(() => {
+          if (eosData.connected && !tcpServer) {
+            console.log('Auto-starting TCP server after EOS reconnect...');
+            startTCPServer();
+          }
+        }, 5000);
       }
     });
 
