@@ -29,6 +29,7 @@ let pendingCueRequest = null; // { cueList, cueNumber }
 
 let settings = {
   outputPath: process.cwd(),
+  stitchedOutputPath: '',
   namingConvention: '{date}_{eosCueListName}_{eosCueLabel}_{input}',
   folderNaming: '{date}_{eosCueListName}_{eosCueLabel}',
   routerIP: '10.101.130.101',
@@ -37,6 +38,13 @@ let settings = {
   selectedDevice: null,
   detectedFramerate: 30
 };
+
+// EOS reconnection tracking
+let eosReconnectInterval = null;
+let eosReconnectStartTime = null;
+const EOS_INITIAL_RECONNECT_INTERVAL = 10000; // 10 seconds
+const EOS_LATER_RECONNECT_INTERVAL = 30000;    // 30 seconds
+const EOS_INITIAL_PERIOD = 120000;              // 2 minutes
 
 function loadSettings() {
   try {
@@ -203,6 +211,20 @@ ipcMain.handle('run-test-sequence', async (event, inputs) => {
   return await runTestSequence(inputs);
 });
 
+ipcMain.handle('update-stitched-output-path', async (event, path) => {
+  settings.stitchedOutputPath = path;
+  saveSettings();
+  return true;
+});
+
+ipcMain.handle('stitch-folder', async (event, folderPath) => {
+  return await stitchImages(folderPath);
+});
+
+ipcMain.handle('stitch-latest-folder', async () => {
+  return await stitchLatestFolder();
+});
+
 // ============== EOS OSC INTEGRATION ==============
 
 function connectToEos() {
@@ -303,6 +325,9 @@ function connectToEos() {
         eosData.connected = false;
         oscTCPPort = null;
         sendEosStatusUpdate();
+
+        // Start auto-reconnect
+        startEosAutoReconnect();
       });
 
       // Store socket reference
@@ -349,6 +374,13 @@ function disconnectFromEos() {
         clearInterval(eosPingInterval);
         eosPingInterval = null;
         console.log('Stopped ping interval');
+      }
+
+      // Stop reconnect interval
+      if (eosReconnectInterval) {
+        clearInterval(eosReconnectInterval);
+        eosReconnectInterval = null;
+        console.log('Stopped reconnect interval');
       }
 
       // Unsubscribe from Eos
@@ -511,6 +543,54 @@ function sendEosStatusUpdate() {
   }
 }
 
+function startEosAutoReconnect() {
+  if (!settings.eosIP || settings.eosIP.trim() === '') {
+    return; // No IP configured, don't attempt reconnect
+  }
+
+  if (eosReconnectInterval) {
+    return; // Already reconnecting
+  }
+
+  // Track when reconnection started
+  if (!eosReconnectStartTime) {
+    eosReconnectStartTime = Date.now();
+  }
+
+  const attemptReconnect = () => {
+    if (eosData.connected) {
+      // Successfully reconnected, stop interval
+      if (eosReconnectInterval) {
+        clearInterval(eosReconnectInterval);
+        eosReconnectInterval = null;
+      }
+      return;
+    }
+
+    console.log('Attempting EOS auto-reconnect...');
+    connectToEos().then(result => {
+      if (result.success) {
+        console.log('EOS auto-reconnect successful');
+        eosReconnectStartTime = null;
+      }
+    });
+
+    // Adjust interval after 2 minutes
+    const elapsedTime = Date.now() - eosReconnectStartTime;
+    if (elapsedTime > EOS_INITIAL_PERIOD) {
+      // Switch to 30-second interval
+      if (eosReconnectInterval) {
+        clearInterval(eosReconnectInterval);
+      }
+      eosReconnectInterval = setInterval(attemptReconnect, EOS_LATER_RECONNECT_INTERVAL);
+    }
+  };
+
+  // Start with 10-second interval
+  eosReconnectInterval = setInterval(attemptReconnect, EOS_INITIAL_RECONNECT_INTERVAL);
+  console.log('Started EOS auto-reconnect (10s interval for first 2min, then 30s)');
+}
+
 // ============== TCP SERVER FOR STREAM DECK ==============
 
 function startTCPServer() {
@@ -660,6 +740,7 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
     isSequenceRunning = true;
     let captured = 0;
     let failed = 0;
+    let captureFolder = null;
 
     sendSequenceProgress(`Starting test sequence for Output 1 (${inputs.join(',')})...`, 'info');
 
@@ -681,6 +762,12 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
         if (captureResult.success) {
           captured++;
           sendSequenceProgress(`✓ Captured Input ${input}`, 'success');
+
+          // Track the capture folder from the first successful capture
+          if (!captureFolder && captureResult.filepath) {
+            captureFolder = path.dirname(captureResult.filepath);
+            console.log('Capture folder tracked:', captureFolder);
+          }
         } else {
           failed++;
           sendSequenceProgress(`✗ Skipped Input ${input} (no source detected)`, 'error');
@@ -696,11 +783,25 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
     }
 
     isSequenceRunning = false;
+
+    // Auto-stitch if we captured any images
+    if (captured > 0 && captureFolder && settings.stitchedOutputPath) {
+      sendSequenceProgress('Stitching captured images...', 'info');
+
+      const stitchResult = await stitchImages(captureFolder);
+      if (stitchResult.success) {
+        sendSequenceProgress(`✓ Stitched ${stitchResult.imageCount} images to ${stitchResult.filepath}`, 'success');
+      } else {
+        sendSequenceProgress(`⚠ Stitch failed: ${stitchResult.error}`, 'error');
+      }
+    }
+
     return {
       success: true,
       total: inputs.length,
       captured,
-      failed
+      failed,
+      captureFolder  // Return the actual folder path
     };
 
   } catch (error) {
@@ -762,6 +863,163 @@ function sendSequenceProgress(message, type = 'info') {
     mainWindow.webContents.send('sequence-progress', { message, type });
   }
   console.log(`[SEQUENCE] ${message}`);
+}
+
+// ============== IMAGE STITCHING ==============
+
+async function stitchLatestFolder() {
+  try {
+    console.log('=== FINDING LATEST FOLDER TO STITCH ===');
+
+    if (!settings.outputPath) {
+      return { success: false, error: 'No capture folder configured' };
+    }
+
+    // Read all subdirectories in the capture folder
+    const items = fs.readdirSync(settings.outputPath, { withFileTypes: true });
+    const folders = items
+      .filter(item => item.isDirectory())
+      .map(folder => ({
+        name: folder.name,
+        path: path.join(settings.outputPath, folder.name),
+        stat: fs.statSync(path.join(settings.outputPath, folder.name))
+      }))
+      .sort((a, b) => b.stat.mtime - a.stat.mtime); // Sort by modification time, newest first
+
+    if (folders.length === 0) {
+      return { success: false, error: 'No folders found in capture directory' };
+    }
+
+    // Get the most recent folder
+    const latestFolder = folders[0];
+    console.log(`Latest folder: ${latestFolder.name} (${latestFolder.stat.mtime})`);
+
+    // Check if it has PNG images
+    const pngFiles = fs.readdirSync(latestFolder.path).filter(f => f.toLowerCase().endsWith('.png'));
+    if (pngFiles.length === 0) {
+      return { success: false, error: `Latest folder (${latestFolder.name}) has no PNG images` };
+    }
+
+    console.log(`Found ${pngFiles.length} PNG files in latest folder`);
+
+    // Stitch the folder
+    return await stitchImages(latestFolder.path);
+
+  } catch (error) {
+    console.error('Error finding latest folder:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function stitchImages(folderPath) {
+  return new Promise((resolve) => {
+    try {
+      console.log('=== STARTING IMAGE STITCH ===');
+      console.log(`Folder: ${folderPath}`);
+
+      if (!fs.existsSync(folderPath)) {
+        return resolve({ success: false, error: 'Folder does not exist' });
+      }
+
+      // Read all PNG files from folder
+      const files = fs.readdirSync(folderPath)
+        .filter(file => file.toLowerCase().endsWith('.png'))
+        .sort(); // Sort alphabetically
+
+      if (files.length === 0) {
+        return resolve({ success: false, error: 'No PNG images found in folder' });
+      }
+
+      console.log(`Found ${files.length} images to stitch`);
+
+      // Get folder name for output filename
+      const folderName = path.basename(folderPath);
+      const outputPath = settings.stitchedOutputPath || settings.outputPath;
+      const outputFilename = `${folderName}_stitched.png`;
+      const outputFilePath = path.join(outputPath, outputFilename);
+
+      // Build FFmpeg command for horizontal stitching
+      const inputFiles = files.map(f => path.join(folderPath, f));
+      const ffmpegPath = 'ffmpeg'; // Assumes ffmpeg in PATH
+
+      // Create filter_complex for horizontal stacking
+      // For odd numbers, we'll create rows and stack them
+      const imagesPerRow = Math.ceil(Math.sqrt(files.length));
+      let filterComplex = '';
+      let inputs = '';
+
+      // Build inputs
+      inputFiles.forEach((file, i) => {
+        inputs += `-i "${file}" `;
+      });
+
+      // Simple horizontal stacking for all images
+      if (files.length === 1) {
+        // Just copy single image
+        filterComplex = '[0:v]copy[out]';
+      } else if (files.length === 2) {
+        filterComplex = '[0:v][1:v]hstack=inputs=2[out]';
+      } else if (files.length <= 6) {
+        // Horizontal stack for 3-6 images
+        filterComplex = '';
+        for (let i = 0; i < files.length; i++) {
+          filterComplex += `[${i}:v]`;
+        }
+        filterComplex += `hstack=inputs=${files.length}[out]`;
+      } else {
+        // Grid layout for more than 6 images
+        const rows = Math.ceil(files.length / imagesPerRow);
+        let rowFilters = [];
+
+        for (let row = 0; row < rows; row++) {
+          const startIdx = row * imagesPerRow;
+          const endIdx = Math.min(startIdx + imagesPerRow, files.length);
+          const imagesInRow = endIdx - startIdx;
+
+          let rowFilter = '';
+          for (let i = startIdx; i < endIdx; i++) {
+            rowFilter += `[${i}:v]`;
+          }
+          rowFilter += `hstack=inputs=${imagesInRow}[row${row}]`;
+          rowFilters.push(rowFilter);
+        }
+
+        filterComplex = rowFilters.join(';') + ';';
+        for (let row = 0; row < rows; row++) {
+          filterComplex += `[row${row}]`;
+        }
+        filterComplex += `vstack=inputs=${rows}[out]`;
+      }
+
+      const command = `${ffmpegPath} ${inputs} -filter_complex "${filterComplex}" -map "[out]" -y "${outputFilePath}"`;
+      console.log(`Stitch command: ${command}`);
+
+      exec(command, {
+        timeout: 60000,
+        env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+      }, (error, stdout, stderr) => {
+        if (error) {
+          console.error('Stitch error:', error);
+          console.error('Stderr:', stderr);
+          return resolve({ success: false, error: error.message });
+        }
+
+        if (fs.existsSync(outputFilePath)) {
+          const stats = fs.statSync(outputFilePath);
+          if (stats.size > 0) {
+            console.log(`✓ Successfully stitched ${files.length} images to ${outputFilePath}`);
+            return resolve({ success: true, filepath: outputFilePath, imageCount: files.length });
+          }
+        }
+
+        resolve({ success: false, error: 'Stitched file not created' });
+      });
+
+    } catch (error) {
+      console.error('Stitch error:', error);
+      resolve({ success: false, error: error.message });
+    }
+  });
 }
 
 function getFFmpegPaths() {

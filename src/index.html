@@ -270,6 +270,11 @@
         .status-indicator.gray {
             background-color: #8E8E93;
         }
+
+        .status-indicator.orange {
+            background-color: #FF9500;
+            box-shadow: 0 0 4px #FF9500;
+        }
     </style>
 </head>
 <body>
@@ -285,11 +290,21 @@
             </div>
 
             <div class="collapsible-content" id="outputSettingsContent">
-                <label for="outputPath">File Destination:</label>
+                <label for="outputPath">Capture Images Folder:</label>
                 <button id="selectPath">Select Folder</button>
                 <div id="currentPath" class="path-display">No folder selected</div>
+                <div class="help-text">
+                    Where individual capture images and subfolders are saved
+                </div>
 
-                <label for="folderNaming">Folder Naming Convention:</label>
+                <label for="stitchedPath" style="margin-top: 15px;">Stitched Images Folder:</label>
+                <button id="selectStitchedPath">Select Folder</button>
+                <div id="currentStitchedPath" class="path-display">No folder selected</div>
+                <div class="help-text">
+                    Where merged/stitched images are saved (can be same as capture folder)
+                </div>
+
+                <label for="folderNaming" style="margin-top: 15px;">Folder Naming Convention:</label>
                 <input type="text" id="folderNaming" placeholder="{date}_{eosCueListName}_{eosCueLabel}" value="{date}_{eosCueListName}_{eosCueLabel}">
                 <div class="help-text">
                     Variables: {date}, {eosCueListName}, {eosCueLabel}, {eosCueNumber}, {eosShowName}, {timestamp}
@@ -322,6 +337,13 @@
             <button class="capture-button" onclick="captureNow()">Capture Image</button>
             <div class="help-text">
                 Captures current input to the selected folder
+            </div>
+
+            <div style="margin-top: 20px;">
+                <button id="manualStitch" style="background-color: #FF9500; width: 100%; padding: 15px; font-size: 16px; font-weight: 600;" onclick="manualStitch()">Stitch Latest Folder</button>
+                <div class="help-text">
+                    Automatically finds and stitches the most recent folder in Capture Images Folder
+                </div>
             </div>
 
             <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #ddd;">

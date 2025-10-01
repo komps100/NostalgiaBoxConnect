@@ -1,11 +1,14 @@
 let currentSettings = {
     outputPath: '',
+    stitchedOutputPath: '',
     namingConvention: '{date}_{eosCueListName}_{eosCueLabel}_{input}',
     folderNaming: '{date}_{eosCueListName}_{eosCueLabel}',
     routerIP: '10.101.130.101',
     eosIP: '',
     tcpPort: 9999
 };
+
+let lastCaptureFolder = '';
 
 let currentEosData = {
     showName: '',
@@ -18,6 +21,7 @@ let currentEosData = {
 
 const elements = {
     currentPath: null,
+    currentStitchedPath: null,
     namingConvention: null,
     folderNaming: null,
     routerIP: null,
@@ -100,6 +104,7 @@ function updateNamingPreviews() {
 
 function initElements() {
     elements.currentPath = document.getElementById('currentPath');
+    elements.currentStitchedPath = document.getElementById('currentStitchedPath');
     elements.namingConvention = document.getElementById('namingConvention');
     elements.folderNaming = document.getElementById('folderNaming');
     elements.routerIP = document.getElementById('routerIP');
@@ -131,6 +136,7 @@ async function loadSettings() {
     try {
         currentSettings = await window.electronAPI.getSettings();
         elements.currentPath.textContent = currentSettings.outputPath || 'No folder selected';
+        elements.currentStitchedPath.textContent = currentSettings.stitchedOutputPath || 'No folder selected';
         elements.namingConvention.value = currentSettings.namingConvention;
         elements.folderNaming.value = currentSettings.folderNaming;
         elements.routerIP.value = currentSettings.routerIP;
@@ -600,8 +606,48 @@ async function onDeviceChange() {
 }
 
 
+async function selectStitchedOutputPath() {
+    try {
+        const path = await window.electronAPI.selectOutputPath();
+        if (path) {
+            await window.electronAPI.updateStitchedOutputPath(path);
+            currentSettings.stitchedOutputPath = path;
+            elements.currentStitchedPath.textContent = path;
+            showStatus('Stitched output path updated', 'success');
+        }
+    } catch (error) {
+        showStatus('Failed to select stitched output path', 'error');
+    }
+}
+
+async function manualStitch() {
+    if (!currentSettings.outputPath) {
+        showStatus('Please configure Capture Images Folder first', 'error');
+        return;
+    }
+
+    if (!currentSettings.stitchedOutputPath) {
+        showStatus('Please configure Stitched Images Folder first', 'error');
+        return;
+    }
+
+    showStatus('Finding latest folder and stitching images...', 'info');
+
+    try {
+        const result = await window.electronAPI.stitchLatestFolder();
+        if (result.success) {
+            showStatus(`Successfully stitched ${result.imageCount} images to ${result.filepath}`, 'success');
+        } else {
+            showStatus(`Stitch failed: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`Stitch error: ${error.message}`, 'error');
+    }
+}
+
 function initEventListeners() {
     document.getElementById('selectPath').addEventListener('click', selectOutputPath);
+    document.getElementById('selectStitchedPath').addEventListener('click', selectStitchedOutputPath);
     elements.namingConvention.addEventListener('change', updateNamingConvention);
     elements.folderNaming.addEventListener('change', updateFolderNaming);
     elements.routerIP.addEventListener('change', updateRouterIP);
@@ -686,6 +732,13 @@ async function runTestSequence(inputs = [1,2,3,4,5,6]) {
 
     try {
         const result = await window.electronAPI.runTestSequence(inputs);
+
+        // Track the last capture folder for manual stitching (use actual path returned from main process)
+        if (result.success && result.captureFolder) {
+            lastCaptureFolder = result.captureFolder;
+            console.log('Capture folder tracked:', lastCaptureFolder);
+        }
+
         if (result.success) {
             showStatus(`Test sequence complete! ${result.captured} of ${result.total} captures succeeded.`, 'success');
         } else {
@@ -697,10 +750,13 @@ async function runTestSequence(inputs = [1,2,3,4,5,6]) {
 }
 
 function updateStatusIndicators() {
-    // Output Settings - green if path is set
+    // Output Settings - green if both paths are set
     const outputStatus = document.getElementById('outputSettingsStatus');
-    if (currentSettings.outputPath && currentSettings.outputPath !== '') {
+    if (currentSettings.outputPath && currentSettings.outputPath !== '' &&
+        currentSettings.stitchedOutputPath && currentSettings.stitchedOutputPath !== '') {
         outputStatus.className = 'status-indicator green';
+    } else if (currentSettings.outputPath && currentSettings.outputPath !== '') {
+        outputStatus.className = 'status-indicator orange';
     } else {
         outputStatus.className = 'status-indicator gray';
     }
