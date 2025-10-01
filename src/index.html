@@ -401,14 +401,14 @@
             </div>
 
             <div class="collapsible-content" id="outputSettingsContent">
-                <label for="outputPath">Capture Images Folder:</label>
+                <label for="outputPath" style="margin-bottom: 10px;">Capture Images Folder:</label>
                 <button id="selectPath">Select Folder</button>
                 <div id="currentPath" class="path-display">No folder selected</div>
                 <div class="help-text">
                     Where individual capture images and subfolders are saved
                 </div>
 
-                <label for="stitchedPath" style="margin-top: 15px;">Stitched Images Folder:</label>
+                <label for="stitchedPath" style="margin-top: 15px; margin-bottom: 10px;">Stitched Images Folder:</label>
                 <button id="selectStitchedPath">Select Folder</button>
                 <div id="currentStitchedPath" class="path-display">No folder selected</div>
                 <div class="help-text">
@@ -488,7 +488,7 @@
 
             <div class="collapsible-content" id="eosSettingsContent">
                 <label for="eosIP">EOS Console IP Address:</label>
-                <input type="text" id="eosIP" placeholder="192.168.1.100" value="">
+                <input type="text" id="eosIP" placeholder="192.168.1.100" value="" style="margin-bottom: 10px;">
                 <button id="connectEos">Connect to EOS</button>
                 <button id="disconnectEos" disabled>Disconnect</button>
                 <button id="pingEos" disabled>Send Ping</button>
@@ -506,7 +506,7 @@
 
             <div class="collapsible-content" id="streamDeckContent">
                 <label for="tcpPort">TCP Server Port:</label>
-                <input type="text" id="tcpPort" placeholder="9999" value="9999">
+                <input type="text" id="tcpPort" placeholder="9999" value="9999" style="margin-bottom: 10px;">
                 <button id="startServer">Start Server</button>
                 <button id="stopServer" disabled>Stop Server</button>
                 <div class="preview-status" id="serverStatus"></div>

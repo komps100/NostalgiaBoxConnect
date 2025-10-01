@@ -105,7 +105,7 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 
 2. **Install Nostalgia Box Controller**:
    - Download the DMG from the releases page
-   - Open `Nostalgia Box Controller-1.1.0-arm64.dmg`
+   - Open `Nostalgia Box Controller-1.3.0-arm64.dmg`
    - Drag the app to your Applications folder
    - Right-click the app and select "Open" (first launch only, due to code signing)
 
@@ -235,7 +235,7 @@ npm run dev        # With dev tools
 npm run build
 ```
 
-Output: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg`
+Output: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
 
 ## Technical Details
 
@@ -249,9 +249,11 @@ Output: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg`
   - Processed files log for tracking
 - **Router Protocol**: Telnet (port 9990)
 - **Architecture**: Secure IPC with main/renderer process separation
-- **UI Design**: Collapsible sections with status indicators (green/red/gray/orange)
+- **UI Design**: Purple gradient theme with ambient particle animation
+  - Collapsible settings sections with status indicators
+  - Real-time show/cue display with uptime and connection count
+  - Ambient drift particle animation (90 particles, slow organic movement)
 - **File Naming**: Invalid chars removed, spaces preserved, automatic duplicate handling
-- **Activity Tracking**: Real-time status updates in header
 - **Dependencies**: `sharp`, `osc`, `node-osc` (legacy)
 
 ## License
@@ -264,7 +266,7 @@ For issues, feature requests, or questions, please contact the development team.
 
 ---
 
-**Version**: 1.1.0
-**Build**: `Nostalgia Box Controller-1.1.0-arm64.dmg` (99MB)
+**Version**: 1.3.0
+**Build**: `Nostalgia Box Controller-1.3.0-arm64.dmg`
 **Last Updated**: October 2025
-**Major Update**: Sharp-based image stitching with precise grid layouts
+**Major Update**: UI redesign with purple gradient theme and ambient particle animation

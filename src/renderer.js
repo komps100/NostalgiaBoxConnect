@@ -607,18 +607,40 @@ class Particle {
     constructor(canvas) {
         this.x = Math.random() * canvas.width;
         this.y = Math.random() * canvas.height;
-        this.vx = (Math.random() - 0.5) * 0.5;
-        this.vy = (Math.random() - 0.5) * 0.5;
-        this.radius = Math.random() * 2 + 1;
-        this.opacity = Math.random() * 0.5 + 0.3;
+        this.vx = (Math.random() - 0.5) * 0.1; // Very slow drift
+        this.vy = (Math.random() - 0.5) * 0.1; // No gravity, random direction
+        this.radius = Math.random() * 3 + 1; // Varying sizes 1-4px
+        this.opacity = Math.random() * 0.4 + 0.2; // Subtle opacity 0.2-0.6
+        this.targetVx = this.vx;
+        this.targetVy = this.vy;
+        this.changeTimer = Math.random() * 200;
     }
 
     update(canvas) {
-        this.x += this.vx;
-        this.y += this.vy;
+        // Smooth velocity changes for organic motion
+        this.changeTimer--;
+        if (this.changeTimer <= 0) {
+            this.targetVx = (Math.random() - 0.5) * 0.15;
+            this.targetVy = (Math.random() - 0.5) * 0.15;
+            this.changeTimer = Math.random() * 200 + 100;
+        }
 
-        if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
-        if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+        // Gradually move towards target velocity
+        this.vx += (this.targetVx - this.vx) * 0.02;
+        this.vy += (this.targetVy - this.vy) * 0.02;
+
+        // Brownian motion jitter
+        const jitterX = (Math.random() - 0.5) * 0.2;
+        const jitterY = (Math.random() - 0.5) * 0.2;
+
+        this.x += this.vx + jitterX;
+        this.y += this.vy + jitterY;
+
+        // Wrap around edges
+        if (this.x < 0) this.x = canvas.width;
+        if (this.x > canvas.width) this.x = 0;
+        if (this.y > canvas.height) this.y = 0;
+        if (this.y < 0) this.y = canvas.height;
     }
 
     draw(ctx) {
@@ -639,7 +661,7 @@ function initParticleAnimation() {
 
     // Create particles
     particles = [];
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 90; i++) {
         particles.push(new Particle(particleCanvas));
     }
 
@@ -656,22 +678,7 @@ function animateParticles() {
         particle.draw(particleCtx);
     });
 
-    // Draw connections
-    particles.forEach((p1, i) => {
-        particles.slice(i + 1).forEach(p2 => {
-            const dx = p1.x - p2.x;
-            const dy = p1.y - p2.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < 100) {
-                particleCtx.beginPath();
-                particleCtx.moveTo(p1.x, p1.y);
-                particleCtx.lineTo(p2.x, p2.y);
-                particleCtx.strokeStyle = `rgba(255, 255, 255, ${0.2 * (1 - distance / 100)})`;
-                particleCtx.stroke();
-            }
-        });
-    });
+    // No connection lines for dust effect
 
     animationFrame = requestAnimationFrame(animateParticles);
 }

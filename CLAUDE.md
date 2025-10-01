@@ -3,26 +3,26 @@
 ## Project Overview
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
-## Current Status: ✅ WORKING (v1.1.0)
-All features working. Capture, preview, router switching, test sequences with retry logic, **Sharp-based grid stitching**, collapsible UI with status indicators, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, Stream Deck auto-start, duplicate handling, and activity indicator.
+## Current Status: ✅ WORKING (v1.3.0)
+All features working. Clean, minimal UI with purple gradient design, ambient particle animation, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, and TCP/IP remote control.
 
 ### Quick Start for Next Session
 
 #### Current State Summary
-- ✅ **100% Functional** - All features working perfectly
-- ✅ **Sharp Stitching** - Reliable 2x2 and 3x2 grid layouts (2-6 images)
-- ✅ **Auto-Everything** - Sequences, stitching, EOS reconnect, TCP auto-start
-- ✅ **Smart Handling** - Duplicate folders/files, auto-switch to Input 1, processed files log
+- ✅ **100% Functional** - Core capture and control features working
+- ✅ **Clean UI** - Simplified interface focused on essential controls
+- ✅ **Purple Gradient Theme** - Cohesive design with ambient particle animation
+- ✅ **Status Display** - Real-time show/cue information with uptime tracking
 
 #### Latest Build
-- **File**: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg` (99MB)
-- **Size Increase**: Sharp library added (~7MB)
-- **Breaking Change**: None - fully backward compatible
+- **File**: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
+- **Major Changes**: UI redesign, removed test sequences and router control from UI
+- **Breaking Change**: None - core functionality maintained
 
-#### Recent Major Update
-- **What Changed**: Replaced FFmpeg stitching with Sharp library
-- **Why**: FFmpeg filter_complex was unreliable for grid layouts
-- **Result**: Perfect, consistent 2x2 and 3x2 grids every time
+#### Recent Major Update (v1.3.0)
+- **What Changed**: Complete UI redesign with focus on simplicity
+- **Why**: Streamline interface, improve visual design, reduce clutter
+- **Result**: Clean, professional UI with ambient particle animation
 
 #### Key Files
 - `src/main.js` - Main process, capture, OSC, TCP server
@@ -46,12 +46,14 @@ All features working. Capture, preview, router switching, test sequences with re
 - Secure IPC communication via preload script
 - Built for macOS ARM64 systems
 
-### ✅ User Interface
-- Clean, native macOS-style interface
-- Collapsible sections (all hidden by default on launch)
+### ✅ User Interface (v1.3.0)
+- Clean, minimal interface with purple gradient theme (#667eea to #764ba2)
+- Ambient particle animation (slow-drift style) in status display
+- Collapsible settings sections (all hidden by default on launch)
 - Status indicators (green/red/gray/orange dots) for each system component
-- Activity indicator in header showing real-time system status
-- Real-time status feedback and progress updates
+- Real-time show/cue information display with uptime and connection count
+- Status messages appear directly under main display (not at bottom)
+- Improved spacing and consistent button padding (8px 16px)
 
 ### ✅ Configuration Management
 - **Router Settings**: Configurable Videohub IP address (default: 10.101.130.101)
@@ -302,7 +304,7 @@ npm run dev
 npm run build
 
 # Package location
-dist/Nostalgia Box Controller-1.1.0-arm64.dmg
+dist/Nostalgia Box Controller-1.3.0-arm64.dmg
 ```
 
 ## Next Session Focus Areas
@@ -447,3 +449,74 @@ v1.1.0 - All features working. Sharp-based image stitching with reliable grid la
 - ✅ **Naming Preview**: Live preview updates with current Eos data
 - ✅ **Separate Folders**: Capture and stitched output folders independent
 - ✅ **Processed Files Log**: Tracks stitched groups to avoid reprocessing
+
+## Restore Point - v1.3.0 (Working State - UI Redesign)
+
+### ✅ What Changed in v1.3.0
+**UI Redesign:**
+- Removed test sequences UI (functionality still in main.js)
+- Removed capture control section
+- Removed router control section from UI
+- Removed preview functionality
+- Status messages now appear under main display (not at bottom)
+- Renamed "Stream Deck Control" to "TCP/IP Remote Control"
+
+**Visual Design:**
+- Added purple gradient theme throughout (#667eea to #764ba2)
+- Implemented ambient particle animation in status display
+- Ambient drift style: slow, omnidirectional movement with smooth velocity transitions
+- 90 particles with varying sizes (1-4px) and opacity (0.2-0.6)
+- No connecting lines between particles
+
+**Status Display:**
+- Particle animation canvas (220px height) as background
+- Show name displayed prominently (28px, left-aligned with padding)
+- Cue list and cue labels in italics below show name
+- Status pill (Active/Connecting/Inactive) on right with color-coded dot inside
+- Uptime and connection count centered at bottom
+- Real-time updates every second
+
+**Improved Spacing:**
+- All buttons use consistent 8px 16px padding
+- 10px margin below folder labels and input fields
+- Better vertical spacing throughout
+
+### 🎨 Design Details
+**Purple Gradient:**
+- Primary: #667eea (blue-purple)
+- Secondary: #764ba2 (deeper purple)
+- Applied to: body background, buttons, input focus states
+
+**Particle Animation:**
+- Type: Ambient Drift
+- Count: 90 particles
+- Speed: Very slow (0.1 base velocity)
+- Motion: Smooth velocity changes every 100-300 frames
+- Effect: Brownian jitter for natural organic movement
+- No gravity or directional bias
+
+**Status Colors:**
+- Green (#34C759): Active/Connected
+- Orange (#FF9500): Connecting
+- Red (#FF3B30): Inactive/Error
+- Gray (#8E8E93): Not configured
+
+### 📋 UI Sections (Collapsible)
+1. **Output Settings** - Folder paths and naming conventions
+2. **Capture Device** - Device selection dropdown
+3. **Router Settings** - Videohub IP configuration
+4. **ETC EOS Integration** - Console IP and connection
+5. **TCP/IP Remote Control** - TCP server settings
+
+### ✅ Core Functionality Maintained
+- Device detection and capture still working
+- EOS OSC integration unchanged
+- TCP/IP remote control unchanged
+- Router control via API (just UI removed)
+- All backend features preserved
+
+### 📦 Build Info
+- **Version**: 1.3.0
+- **File**: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
+- **Changes**: UI-only redesign, no breaking changes
+- **Dependencies**: Same as v1.1.0 (sharp, osc, electron)
