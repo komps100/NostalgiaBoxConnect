@@ -4,7 +4,13 @@
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
 ## Current Status: ✅ WORKING (v1.1.0)
-All features working. Capture, preview, router switching, ETC Eos OSC integration (TCP-only with sequential Get commands), Stream Deck automation, and refined naming system with spaces allowed.
+All features working. Capture, preview, router switching, test sequences with retry logic, auto-stitching, collapsible UI with status indicators, ETC Eos OSC integration (TCP-only with 500ms delays for reliability), auto-reconnect, Stream Deck auto-start, and activity indicator.
+
+### Quick Start for Tomorrow
+1. **Latest Build**: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg`
+2. **Latest Fix**: Added 500ms delays between OSC commands to fix "3.0" label issue
+3. **All Working**: Test sequences, stitching, EOS auto-reconnect, TCP auto-start, collapsible UI
+4. **Key Files**: src/main.js (OSC delays at lines 505-512 and 538-545), src/renderer.js (UI logic), src/index.html (collapsible sections)
 
 ## Features Implemented
 
@@ -15,8 +21,10 @@ All features working. Capture, preview, router switching, ETC Eos OSC integratio
 
 ### ✅ User Interface
 - Clean, native macOS-style interface
-- Organized sections for different functionality
-- Real-time status feedback
+- Collapsible sections (all hidden by default on launch)
+- Status indicators (green/red/gray/orange dots) for each system component
+- Activity indicator in header showing real-time system status
+- Real-time status feedback and progress updates
 
 ### ✅ Configuration Management
 - **Router Settings**: Configurable Videohub IP address (default: 10.101.130.101)
@@ -63,16 +71,40 @@ All features working. Capture, preview, router switching, ETC Eos OSC integratio
 - PNG output format, configurable output directory and folder structure
 - Native resolution capture (format/resolution/framerate agnostic)
 
+### ✅ Test Sequences (NEW in v1.1.0)
+- **Pre-configured Test Buttons**: Common input combinations (Input 6, Inputs 1-6, 1,2,6, 1,2,3,6, 1,2,3,4,6, 1,2,3,4,5,6)
+- **Automated Workflow**: For each input: switch router → wait → capture → wait
+- **Retry Logic**: 2 attempts per input with 1001ms timeout per attempt
+- **Skip on Failure**: Automatically skips inputs with no video source
+- **Folder Tracking**: Tracks capture folder from first successful capture
+- **Auto-Stitch**: Automatically stitches captured images after sequence completes
+- **Progress Feedback**: Real-time status updates for each step
+
+### ✅ Image Stitching (NEW in v1.1.0)
+- **Auto-Stitch After Sequences**: Stitches images automatically after test sequences complete
+- **Manual Stitch Button**: "Stitch Latest Folder" button to stitch on demand
+- **Latest Folder Detection**: Finds most recent folder by modification time
+- **Grid Layouts**:
+  - 1-6 images: Horizontal stacking
+  - 7+ images: Intelligent grid layout
+- **FFmpeg-based**: Uses filter_complex for high-quality stitching
+- **No Quality Loss**: Full resolution, no compression (JPEG quality 100)
+- **Separate Output**: Stitched images saved to configurable destination folder
+- **Filename Format**: `{folderName}_stitched.png`
+
 ### ✅ ETC Eos Integration (NEW in v1.1.0)
 - **OSC Communication**: Connects to ETC Eos consoles via OSC over TCP only (port 3032)
 - **TCP-Only Protocol**: Uses raw TCP sockets with OSC packet-length framing (no UDP)
+- **Auto-Connect on Launch**: Automatically connects to EOS when app starts
+- **Auto-Reconnect**: Smart reconnection (10s intervals for first 2min, then 30s)
 - **Real-time Data**: Subscribes to active cue information
-- **Sequential OSC Get Commands**:
+- **Sequential OSC Get Commands with Delays**:
   - Waits for active cue notification before sending any Get commands
-  - Gets cuelist info first (`/eos/get/cuelist/{number}`)
-  - Waits for cuelist response before getting cue info
-  - Then gets cue info (`/eos/get/cue/{list}/{number}`)
+  - Adds 500ms delay before requesting cuelist info (`/eos/get/cuelist/{number}`)
+  - Waits for cuelist response before proceeding
+  - Adds 500ms delay before requesting cue info (`/eos/get/cue/{list}/{number}`)
   - Retrieves clean text labels (cue list name from args[2], cue label from args[2])
+  - **Total ~1s delay between commands improves reliability and fixes "3.0" label issue**
 - **Variables Available**:
   - Show name
   - Cue list number and name (text label)
@@ -84,12 +116,15 @@ All features working. Capture, preview, router switching, ETC Eos OSC integratio
 
 ### ✅ Stream Deck Companion Integration (NEW in v1.1.0)
 - **TCP Server**: Listens for commands from Stream Deck Companion
+- **Auto-Start**: Automatically starts 5 seconds after successful EOS connection
+- **Auto-Stop**: Automatically stops when EOS disconnects
 - **Sequence Automation**: Process comma-separated input sequences (e.g., "1,2,6")
 - **Automated Workflow**:
   1. Receives sequence command from Stream Deck
   2. For each input: switches router → waits → captures image
-  3. Returns real-time feedback to Stream Deck
-- **Folder Organization**: Each sequence creates a dated folder with all captures
+  3. Auto-stitches all captured images into composite
+  4. Returns real-time feedback to Stream Deck
+- **Folder Organization**: Each sequence creates a dated folder with all captures and stitched image
 - **Error Handling**: Continues sequence even if individual captures fail
 - **Configurable Port**: Default 9999, customizable in UI
 
@@ -248,9 +283,17 @@ dist/Nostalgia Box Controller-1.1.0-arm64.dmg
 - Settings persistence across sessions (including new Eos/TCP settings)
 - FFmpeg path discovery and installation validation
 - Framerate detection and optimization
-- **ETC Eos OSC integration** with real-time cue tracking
-- **Stream Deck TCP server** for automated sequence capture
+- **Test sequences** with pre-configured buttons (6, 1-6, 1,2,6, 1,2,3,6, 1,2,3,4,6, 1,2,3,4,5,6)
+- **Retry logic** with 1001ms timeout and auto-skip on missing sources
+- **Image stitching** (auto-stitch after sequences, manual stitch latest folder)
+- **Collapsible UI** with all sections hidden by default
+- **Status indicators** (green/red/gray/orange) for all system components
+- **Activity indicator** in header showing real-time system status
+- **ETC Eos OSC integration** with real-time cue tracking and 500ms command delays
+- **Auto-reconnect** (10s for first 2min, then 30s intervals)
+- **Stream Deck TCP server** with auto-start 5s after EOS connection
 - **Folder/file naming** with Eos variables and automatic folder creation
+- **Separate folders** for captures and stitched outputs
 
 ### 🔑 Key Technical Details
 1. **Blackmagic Device Handling**:
@@ -278,12 +321,18 @@ dist/Nostalgia Box Controller-1.1.0-arm64.dmg
 - `isBlackmagic` flag set during device detection (checks if name contains "blackmagic")
 - Preview automatically restarts when switching between devices (except Blackmagic)
 - Capture uses selected device index with framerate fallback strategy
-- Settings stored include: outputPath, namingConvention, folderNaming, routerIP, eosIP, tcpPort, selectedDevice, detectedFramerate
-- **Eos Connection**: OSC client sends to port 3032, OSC server listens on port 3033
+- Settings stored include: outputPath, stitchedOutputPath, namingConvention, folderNaming, routerIP, eosIP, tcpPort, selectedDevice, detectedFramerate
+- **Eos Connection**: OSC client sends to port 3032 with packet-length framing (OSC 1.0 spec)
+- **OSC Delays**: 500ms delay before cuelist Get, 500ms delay before cue Get (total ~1s between commands)
+- **Auto-Reconnect**: Starts automatically on disconnect, 10s for first 2min, then 30s
 - **TCP Server**: Listens on configurable port (default 9999), handles multiple connections
+- **TCP Auto-Start**: Starts 5s after EOS connection, stops on EOS disconnect
 - **Sequence Protection**: `isSequenceRunning` flag prevents concurrent sequences
 - **Folder Creation**: Happens during capture, not configuration change
 - **Variable Replacement**: Applied to both folder name and file name during each capture
+- **Folder Tracking**: First successful capture in sequence tracks folder for stitching
+- **Image Stitching**: FFmpeg filter_complex with hstack (≤6 images) or grid layout (>6 images)
+- **Latest Folder Detection**: Scans capture directory, sorts by mtime, stitches most recent
 
 ### 🎯 Stream Deck Companion Setup
 To use with Stream Deck Companion:
@@ -296,18 +345,35 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.1.0 - All features working. Eos OSC (TCP-only with sequential Get commands), Stream Deck integration, capture, router switching, and refined naming system with spaces allowed.
+v1.1.0 - All features working. Includes test sequences, image stitching, collapsible UI with status indicators, EOS OSC with optimized delays (fixes "3.0" label issue), auto-reconnect, Stream Deck auto-start, and activity indicator.
 
-## Recent Fixes (Latest Build)
-- ✅ **Sequential OSC Flow**: Get commands now sent sequentially (cuelist → wait → cue)
+## Recent Fixes (Latest Build - v1.1.0)
+- ✅ **Sequential OSC Flow**: Get commands sent sequentially (cuelist → wait → cue)
+- ✅ **OSC Timing Optimization**: Added 500ms delays between OSC commands for reliable data retrieval
+- ✅ **Cue Label Reliability**: Increased delays fix intermittent "3.0" label issue
 - ✅ **Correct Arg Indices**: Cue list name extracted from args[2] (not args[3])
 - ✅ **Spaces Allowed**: Sanitization no longer converts spaces to underscores
 - ✅ **Date Variable Added**: `{date}` variable for YYYYMMDD format (e.g., 20250930)
 - ✅ **Updated Defaults**: Templates now use `{date}_{eosCueListName}_{eosCueLabel}_{input}`
+- ✅ **Test Sequences**: Built-in buttons for common input combinations (6, 1-6, 1,2,6, etc.)
+- ✅ **Image Stitching**: Auto-stitch after sequences with manual option for latest folder
+- ✅ **Collapsible UI**: All sections hideable by default with expand/collapse arrows
+- ✅ **Status Indicators**: Green/red/gray/orange dots show system component status
+- ✅ **Activity Indicator**: Real-time one-line status tracking in header
+- ✅ **Auto-Reconnect**: Smart EOS reconnection (10s for first 2min, then 30s intervals)
+- ✅ **TCP Auto-Start**: Stream Deck server starts automatically 5s after EOS connection
+- ✅ **Retry Logic**: Capture timeout at 1001ms per attempt, auto-skips missing sources
 
 ## Confirmed Working
 - ✅ **Capture**: Working for all devices
 - ✅ **Router Switching**: Working
-- ✅ **Eos OSC**: TCP-only communication with sequential Get flow, correct label extraction
+- ✅ **Test Sequences**: All pre-configured sequences working with retry logic
+- ✅ **Image Stitching**: Auto-stitch after sequences and manual stitch latest folder both working
+- ✅ **Eos OSC**: TCP-only communication with 500ms delays, reliable label extraction (fixes "3.0" issue)
+- ✅ **Eos Auto-Reconnect**: Smart reconnection working (10s → 30s intervals)
+- ✅ **Stream Deck TCP**: Server auto-starts 5s after EOS, auto-stops on disconnect
+- ✅ **Collapsible UI**: All sections expandable/collapsible with status indicators
+- ✅ **Activity Indicator**: Real-time status tracking in header
 - ✅ **Filename Sanitization**: Removes invalid chars, preserves spaces
 - ✅ **Naming Preview**: Live preview updates with current Eos data
+- ✅ **Separate Folders**: Capture and stitched output folders independent

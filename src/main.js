@@ -729,6 +729,18 @@ async function handleSequenceCommand(command, socket) {
     isSequenceRunning = true;
     socket.write(`Starting sequence: ${inputs.join(',')}\n`);
 
+    // Generate folder once for the entire sequence
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputs[0], timestamp);
+    const folderName = sanitizeFilename(folderNameRaw);
+    const captureFolder = path.join(settings.outputPath, folderName);
+
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(captureFolder)) {
+      console.log(`Creating capture folder for sequence: ${captureFolder}`);
+      fs.mkdirSync(captureFolder, { recursive: true });
+    }
+
     for (const input of inputs) {
       try {
         socket.write(`Switching to input ${input}...\n`);
@@ -741,8 +753,8 @@ async function handleSequenceCommand(command, socket) {
 
         socket.write(`Capturing input ${input}...\n`);
 
-        // Capture image
-        const result = await captureStill(input);
+        // Capture image with shared folder
+        const result = await captureStill(input, captureFolder, timestamp);
 
         if (result.success) {
           socket.write(`✓ Captured input ${input} to ${result.filepath}\n`);
@@ -755,6 +767,17 @@ async function handleSequenceCommand(command, socket) {
 
       } catch (error) {
         socket.write(`✗ Error on input ${input}: ${error.message}\n`);
+      }
+    }
+
+    // Auto-stitch if stitched output path is configured
+    if (settings.stitchedOutputPath && fs.existsSync(captureFolder)) {
+      socket.write(`Stitching captured images...\n`);
+      const stitchResult = await stitchImages(captureFolder);
+      if (stitchResult.success) {
+        socket.write(`✓ Stitched ${stitchResult.imageCount} images to ${stitchResult.filepath}\n`);
+      } else {
+        socket.write(`⚠ Stitch failed: ${stitchResult.error}\n`);
       }
     }
 
@@ -783,9 +806,20 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
     isSequenceRunning = true;
     let captured = 0;
     let failed = 0;
-    let captureFolder = null;
 
     sendSequenceProgress(`Starting test sequence for Output 1 (${inputs.join(',')})...`, 'info');
+
+    // Generate folder once for the entire sequence
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputs[0], timestamp);
+    const folderName = sanitizeFilename(folderNameRaw);
+    const captureFolder = path.join(settings.outputPath, folderName);
+
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(captureFolder)) {
+      console.log(`Creating capture folder for test sequence: ${captureFolder}`);
+      fs.mkdirSync(captureFolder, { recursive: true });
+    }
 
     for (const input of inputs) {
       try {
@@ -800,17 +834,11 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
         sendSequenceProgress(`Capturing Input ${input}...`, 'info');
 
         // Try to capture with retry logic (2 attempts, 1 second timeout each)
-        const captureResult = await captureWithRetry(input, 2, 1000);
+        const captureResult = await captureWithRetry(input, 2, 1000, captureFolder, timestamp);
 
         if (captureResult.success) {
           captured++;
           sendSequenceProgress(`✓ Captured Input ${input}`, 'success');
-
-          // Track the capture folder from the first successful capture
-          if (!captureFolder && captureResult.filepath) {
-            captureFolder = path.dirname(captureResult.filepath);
-            console.log('Capture folder tracked:', captureFolder);
-          }
         } else {
           failed++;
           sendSequenceProgress(`✗ Skipped Input ${input} (no source detected)`, 'error');
@@ -854,14 +882,14 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
   }
 }
 
-async function captureWithRetry(inputNumber, maxRetries, timeoutMs) {
+async function captureWithRetry(inputNumber, maxRetries, timeoutMs, captureFolder = null, timestamp = null) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Capture attempt ${attempt}/${maxRetries} for input ${inputNumber}`);
 
       // Wrap captureStill with a timeout to prevent hanging
       const result = await Promise.race([
-        captureStill(inputNumber),
+        captureStill(inputNumber, captureFolder, timestamp),
         new Promise((resolve) =>
           setTimeout(() => resolve({
             success: false,
@@ -1237,19 +1265,29 @@ async function setVideohubInput(input, output = 1) {
   });
 }
 
-async function captureStill(inputNumber) {
+async function captureStill(inputNumber, providedCaptureFolder = null, providedTimestamp = null) {
   return new Promise((resolve, reject) => {
     console.log('=== CAPTURE START ===');
     console.log(`captureStill called with inputNumber: ${inputNumber}`);
+    console.log(`Provided folder: ${providedCaptureFolder || 'none (will generate)'}`);
+    console.log(`Provided timestamp: ${providedTimestamp || 'none (will generate)'}`);
     console.log(`Current settings:`, JSON.stringify(settings, null, 2));
     console.log(`Eos data:`, JSON.stringify(eosData, null, 2));
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = providedTimestamp || new Date().toISOString().replace(/[:.]/g, '-');
 
-    // Generate folder name with variable substitution and sanitize
-    const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputNumber, timestamp);
-    const folderName = sanitizeFilename(folderNameRaw);
-    const captureFolder = path.join(settings.outputPath, folderName);
+    // Use provided folder or generate a new one
+    let captureFolder;
+    if (providedCaptureFolder) {
+      captureFolder = providedCaptureFolder;
+      console.log(`Using provided capture folder: ${captureFolder}`);
+    } else {
+      // Generate folder name with variable substitution and sanitize
+      const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputNumber, timestamp);
+      const folderName = sanitizeFilename(folderNameRaw);
+      captureFolder = path.join(settings.outputPath, folderName);
+      console.log(`Generated new capture folder: ${captureFolder}`);
+    }
 
     // Create folder if it doesn't exist
     if (!fs.existsSync(captureFolder)) {
@@ -1262,7 +1300,6 @@ async function captureStill(inputNumber) {
     const filename = sanitizeFilename(filenameRaw);
     const filepath = path.join(captureFolder, `${filename}.png`);
 
-    console.log(`Generated folder: ${folderName}`);
     console.log(`Generated filename: ${filename}`);
     console.log(`Generated filepath: ${filepath}`);
     console.log(`Output directory exists: ${fs.existsSync(captureFolder)}`);

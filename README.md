@@ -22,6 +22,9 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 
 ### ETC Eos Integration
 - **Real-time Cue Tracking**: Connects to ETC Eos lighting consoles via OSC
+- **Auto-Connect**: Automatically connects on launch, no manual intervention needed
+- **Auto-Reconnect**: Smart reconnection logic (10s intervals for first 2 minutes, then 30s)
+- **Sequential OSC Commands**: Optimized delays (500ms) between commands for reliable data retrieval
 - **Automatic File Naming**: Use cue information in folder and file names
 - **Available Variables**:
   - `{date}` - Date only in YYYYMMDD format (e.g., 20250930)
@@ -33,15 +36,31 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 - **Live Preview**: See how your folder and file names will appear with current Eos data
 - **TCP Connection**: Reliable OSC over TCP (port 3032)
 
+### Test Sequences & Automation
+- **Built-in Test Buttons**: Pre-configured capture sequences for common input combinations
+  - Single input: Input 6
+  - Multi-input: 1,6 / 1,2,6 / 1,2,3,6 / 1,2,3,4,6 / 1,2,3,4,5,6
+- **Intelligent Retry Logic**: Automatically skips inputs with no video source (1001ms timeout)
+- **Automatic Stitching**: After sequence completes, images are automatically stitched into a single composite
+
 ### Stream Deck Automation
 - **TCP Server**: Listens for commands from Elgato Stream Deck Companion
+- **Auto-Start**: TCP server starts automatically 5 seconds after EOS connection
 - **Sequence Automation**: Send comma-separated input sequences (e.g., "1,2,6")
 - **Automated Workflow**:
   1. Stream Deck sends sequence command
   2. App switches router to each input
   3. Captures image for each input
-  4. Organizes all captures in a timestamped folder
+  4. Auto-stitches captured images into composite
+  5. Organizes all files in a timestamped folder
 - **Configurable Port**: Default 9999, customizable in settings
+
+### Image Stitching
+- **Automatic Stitching**: After test sequences complete, images are auto-stitched
+- **Manual Stitching**: Button to stitch latest capture folder on demand
+- **Grid Layouts**: Intelligent layouts for 1-6 images (horizontal for ≤6, grid for >6)
+- **No Quality Loss**: Full resolution stitching with no compression
+- **Separate Output**: Stitched images saved to configurable destination folder
 
 ### File Organization
 - **Smart Naming**: Customize folder and file naming with variables
@@ -207,11 +226,14 @@ Output: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg`
 ## Technical Details
 
 - **Framework**: Electron 30.x
-- **OSC Protocol**: OSC over TCP (port 3032) with sequential Get commands
+- **OSC Protocol**: OSC over TCP (port 3032) with sequential Get commands and 500ms delays for reliability
 - **Video Capture**: FFmpeg with AVFoundation
+- **Image Stitching**: FFmpeg filter_complex for grid layouts
 - **Router Protocol**: Telnet (port 9990)
 - **Architecture**: Secure IPC with main/renderer process separation
+- **UI Design**: Collapsible sections with status indicators (green/red/gray/orange)
 - **File Naming**: Invalid chars removed, spaces preserved
+- **Activity Tracking**: Real-time status updates in header
 
 ## License
 
