@@ -4,9 +4,20 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const osc = require('osc');
 const net = require('net');
+const { ImageProcessor } = require('./imageProcessor');
 
 let mainWindow;
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+
+// Logger for image processor
+const logger = {
+  info: (msg) => console.log(`[ImageProcessor] ${msg}`),
+  warn: (msg) => console.warn(`[ImageProcessor] ${msg}`),
+  error: (msg) => console.error(`[ImageProcessor] ${msg}`)
+};
+
+// Initialize image processor
+let imageProcessor = null;
 
 // OSC and TCP server instances
 let oscTCPPort = null;
@@ -62,6 +73,13 @@ function loadSettings() {
       }
 
       console.log('Settings loaded:', settings);
+
+      // Initialize image processor with output folder
+      imageProcessor = new ImageProcessor(
+        logger,
+        settings.stitchedOutputPath || settings.outputPath,
+        settings.outputPath
+      );
     }
   } catch (error) {
     console.error('Error loading settings:', error);
@@ -1004,163 +1022,72 @@ async function stitchLatestFolder() {
 }
 
 async function stitchImages(folderPath) {
-  return new Promise((resolve) => {
-    try {
-      console.log('=== STARTING IMAGE STITCH ===');
-      console.log(`Folder: ${folderPath}`);
+  try {
+    console.log('=== STARTING IMAGE STITCH ===');
+    console.log(`Folder: ${folderPath}`);
 
-      if (!fs.existsSync(folderPath)) {
-        return resolve({ success: false, error: 'Folder does not exist' });
-      }
-
-      // Read all PNG files from folder
-      const files = fs.readdirSync(folderPath)
-        .filter(file => file.toLowerCase().endsWith('.png'))
-        .sort(); // Sort alphabetically
-
-      if (files.length === 0) {
-        return resolve({ success: false, error: 'No PNG images found in folder' });
-      }
-
-      console.log(`Found ${files.length} images to stitch`);
-
-      // Get folder name for output filename (no "_stitched" suffix)
-      const folderName = path.basename(folderPath);
-      const outputPath = settings.stitchedOutputPath || settings.outputPath;
-      const outputFilename = `${folderName}.png`;
-      const baseOutputFilePath = path.join(outputPath, outputFilename);
-
-      // Get unique file path (adds _(2), _(3), etc. if file exists)
-      const outputFilePath = getUniqueFilePath(baseOutputFilePath);
-
-      // Build FFmpeg command for horizontal stitching
-      const inputFiles = files.map(f => path.join(folderPath, f));
-      const ffmpegPath = 'ffmpeg'; // Assumes ffmpeg in PATH
-
-      // Create filter_complex for horizontal stacking
-      // For odd numbers, we'll create rows and stack them
-      const imagesPerRow = Math.ceil(Math.sqrt(files.length));
-      let filterComplex = '';
-      let inputs = '';
-
-      // Build inputs
-      inputFiles.forEach((file, i) => {
-        inputs += `-i "${file}" `;
-      });
-
-      // Choose layout based on mode
-      if (settings.stitchLayoutMode === 'auto') {
-        // Auto layout based on number of images
-        if (files.length === 1) {
-          // Just copy single image
-          filterComplex = '[0:v]copy[out]';
-        } else if (files.length === 2) {
-          // 2 side by side
-          filterComplex = '[0:v][1:v]hstack=inputs=2[out]';
-        } else if (files.length === 3) {
-          // 2 top, 1 centered bottom
-          filterComplex = '[0:v][1:v]hstack=inputs=2[top];[top][2:v]vstack=inputs=2[out]';
-        } else if (files.length === 4) {
-          // 2x2 grid
-          filterComplex = '[0:v][1:v]hstack=inputs=2[top];[2:v][3:v]hstack=inputs=2[bottom];[top][bottom]vstack=inputs=2[out]';
-        } else if (files.length === 5) {
-          // 3 top, 2 centered bottom
-          filterComplex = '[0:v][1:v][2:v]hstack=inputs=3[top];[3:v][4:v]hstack=inputs=2[bottom];[top][bottom]vstack=inputs=2[out]';
-        } else if (files.length === 6) {
-          // 3 top, 3 bottom
-          filterComplex = '[0:v][1:v][2:v]hstack=inputs=3[top];[3:v][4:v][5:v]hstack=inputs=3[bottom];[top][bottom]vstack=inputs=2[out]';
-        } else {
-          // Fallback to grid layout for more than 6 images
-          const rows = Math.ceil(files.length / imagesPerRow);
-          let rowFilters = [];
-
-          for (let row = 0; row < rows; row++) {
-            const startIdx = row * imagesPerRow;
-            const endIdx = Math.min(startIdx + imagesPerRow, files.length);
-            const imagesInRow = endIdx - startIdx;
-
-            let rowFilter = '';
-            for (let i = startIdx; i < endIdx; i++) {
-              rowFilter += `[${i}:v]`;
-            }
-            rowFilter += `hstack=inputs=${imagesInRow}[row${row}]`;
-            rowFilters.push(rowFilter);
-          }
-
-          filterComplex = rowFilters.join(';') + ';';
-          for (let row = 0; row < rows; row++) {
-            filterComplex += `[row${row}]`;
-          }
-          filterComplex += `vstack=inputs=${rows}[out]`;
-        }
-      } else {
-        // Line mode - horizontal stacking for all images
-        if (files.length === 1) {
-          filterComplex = '[0:v]copy[out]';
-        } else if (files.length === 2) {
-          filterComplex = '[0:v][1:v]hstack=inputs=2[out]';
-        } else if (files.length <= 6) {
-          // Horizontal stack for 3-6 images
-          filterComplex = '';
-          for (let i = 0; i < files.length; i++) {
-            filterComplex += `[${i}:v]`;
-          }
-          filterComplex += `hstack=inputs=${files.length}[out]`;
-        } else {
-          // Grid layout for more than 6 images
-          const rows = Math.ceil(files.length / imagesPerRow);
-          let rowFilters = [];
-
-          for (let row = 0; row < rows; row++) {
-            const startIdx = row * imagesPerRow;
-            const endIdx = Math.min(startIdx + imagesPerRow, files.length);
-            const imagesInRow = endIdx - startIdx;
-
-            let rowFilter = '';
-            for (let i = startIdx; i < endIdx; i++) {
-              rowFilter += `[${i}:v]`;
-            }
-            rowFilter += `hstack=inputs=${imagesInRow}[row${row}]`;
-            rowFilters.push(rowFilter);
-          }
-
-          filterComplex = rowFilters.join(';') + ';';
-          for (let row = 0; row < rows; row++) {
-            filterComplex += `[row${row}]`;
-          }
-          filterComplex += `vstack=inputs=${rows}[out]`;
-        }
-      }
-
-      const command = `${ffmpegPath} ${inputs} -filter_complex "${filterComplex}" -map "[out]" -y "${outputFilePath}"`;
-      console.log(`Stitch command: ${command}`);
-
-      exec(command, {
-        timeout: 60000,
-        env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
-      }, (error, stdout, stderr) => {
-        if (error) {
-          console.error('Stitch error:', error);
-          console.error('Stderr:', stderr);
-          return resolve({ success: false, error: error.message });
-        }
-
-        if (fs.existsSync(outputFilePath)) {
-          const stats = fs.statSync(outputFilePath);
-          if (stats.size > 0) {
-            console.log(`✓ Successfully stitched ${files.length} images to ${outputFilePath}`);
-            return resolve({ success: true, filepath: outputFilePath, imageCount: files.length });
-          }
-        }
-
-        resolve({ success: false, error: 'Stitched file not created' });
-      });
-
-    } catch (error) {
-      console.error('Stitch error:', error);
-      resolve({ success: false, error: error.message });
+    if (!fs.existsSync(folderPath)) {
+      return { success: false, error: 'Folder does not exist' };
     }
-  });
+
+    // Read all PNG files from folder
+    const files = fs.readdirSync(folderPath)
+      .filter(file => file.toLowerCase().endsWith('.png'))
+      .sort(); // Sort alphabetically
+
+    if (files.length === 0) {
+      return { success: false, error: 'No PNG images found in folder' };
+    }
+
+    if (files.length === 1) {
+      console.log('Only 1 image found, skipping stitch');
+      return { success: false, error: 'Need at least 2 images to stitch' };
+    }
+
+    if (files.length > 6) {
+      console.log(`Found ${files.length} images - limiting to first 6`);
+      files.splice(6); // Keep only first 6
+    }
+
+    console.log(`Found ${files.length} images to stitch`);
+
+    // Ensure image processor is initialized
+    if (!imageProcessor) {
+      imageProcessor = new ImageProcessor(
+        logger,
+        settings.stitchedOutputPath || settings.outputPath,
+        settings.outputPath
+      );
+    }
+
+    // Update output folder in case settings changed
+    imageProcessor.setOutputFolder(settings.stitchedOutputPath || settings.outputPath);
+
+    // Build full paths
+    const imagePaths = files.map(f => path.join(folderPath, f));
+
+    // Use Sharp-based processor
+    await imageProcessor.stitchImages(imagePaths);
+
+    // Get the expected output path
+    const folderName = path.basename(folderPath);
+    const outputPath = settings.stitchedOutputPath || settings.outputPath;
+    const outputFilePath = path.join(outputPath, `${folderName}.jpg`);
+
+    if (fs.existsSync(outputFilePath)) {
+      const stats = fs.statSync(outputFilePath);
+      if (stats.size > 0) {
+        console.log(`✓ Successfully stitched ${files.length} images to ${outputFilePath}`);
+        return { success: true, filepath: outputFilePath, imageCount: files.length };
+      }
+    }
+
+    return { success: false, error: 'Stitched file not created' };
+
+  } catch (error) {
+    console.error('Stitch error:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 function getFFmpegPaths() {

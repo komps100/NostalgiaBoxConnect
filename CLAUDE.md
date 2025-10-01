@@ -84,13 +84,19 @@ All features working. Capture, preview, router switching, test sequences with re
 - **Auto-Stitch After Sequences**: Stitches images automatically after test sequences complete
 - **Manual Stitch Button**: "Stitch Latest Folder" button to stitch on demand
 - **Latest Folder Detection**: Finds most recent folder by modification time
+- **Sharp-based Processing**: Uses Sharp library for reliable, fast image composition
 - **Grid Layouts**:
-  - 1-6 images: Horizontal stacking
-  - 7+ images: Intelligent grid layout
-- **FFmpeg-based**: Uses filter_complex for high-quality stitching
-- **No Quality Loss**: Full resolution, no compression (JPEG quality 100)
+  - 2 images: Side by side (2x1)
+  - 3 images: 2 top, 1 centered bottom (2x2 grid with black background)
+  - 4 images: 2x2 grid (white background)
+  - 5 images: 3 top, 2 centered bottom (3x2 grid with black background)
+  - 6 images: 3x2 grid (white background)
+- **Smart Backgrounds**: Black for odd counts (3,5), white for even counts (2,4,6)
+- **No Quality Loss**: Full resolution JPEG output at quality 100
 - **Separate Output**: Stitched images saved to configurable destination folder
-- **Filename Format**: `{folderName}_stitched.png`
+- **Filename Format**: `{folderName}.jpg` (no "_stitched" suffix)
+- **Duplicate Handling**: Files get `_(2)`, `_(3)`, etc. suffix if name exists
+- **Processed Files Log**: Tracks processed groups to avoid reprocessing
 
 ### ✅ ETC Eos Integration (NEW in v1.1.0)
 - **OSC Communication**: Connects to ETC Eos consoles via OSC over TCP only (port 3032)
@@ -345,9 +351,16 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.1.0 - All features working. Includes test sequences, image stitching, collapsible UI with status indicators, EOS OSC with optimized delays (fixes "3.0" label issue), auto-reconnect, Stream Deck auto-start, and activity indicator.
+v1.1.0 - All features working. Sharp-based image stitching with reliable grid layouts, test sequences, collapsible UI with status indicators, EOS OSC with optimized delays, auto-reconnect, Stream Deck auto-start, and activity indicator. Replaced FFmpeg stitching with Sharp library for better reliability and precise grid positioning.
 
 ## Recent Fixes (Latest Build - v1.1.0)
+- ✅ **Sharp-Based Stitching**: Replaced FFmpeg with Sharp library for reliable grid layouts
+- ✅ **Grid Positioning**: Precise 2x2 and 3x2 layouts with centered positioning for odd counts
+- ✅ **Smart Backgrounds**: Black background for odd image counts, white for even
+- ✅ **Duplicate Folders**: Automatic (2), (3), etc. suffix for duplicate folder names
+- ✅ **Duplicate Files**: Automatic _(2), _(3), etc. suffix for duplicate stitched files
+- ✅ **No _stitched Suffix**: Stitched files now use folder name directly
+- ✅ **Switch to Input 1**: Sequences automatically switch back to Input 1 when complete
 - ✅ **Sequential OSC Flow**: Get commands sent sequentially (cuelist → wait → cue)
 - ✅ **OSC Timing Optimization**: Added 500ms delays between OSC commands for reliable data retrieval
 - ✅ **Cue Label Reliability**: Increased delays fix intermittent "3.0" label issue
@@ -356,7 +369,6 @@ v1.1.0 - All features working. Includes test sequences, image stitching, collaps
 - ✅ **Date Variable Added**: `{date}` variable for YYYYMMDD format (e.g., 20250930)
 - ✅ **Updated Defaults**: Templates now use `{date}_{eosCueListName}_{eosCueLabel}_{input}`
 - ✅ **Test Sequences**: Built-in buttons for common input combinations (6, 1-6, 1,2,6, etc.)
-- ✅ **Image Stitching**: Auto-stitch after sequences with manual option for latest folder
 - ✅ **Collapsible UI**: All sections hideable by default with expand/collapse arrows
 - ✅ **Status Indicators**: Green/red/gray/orange dots show system component status
 - ✅ **Activity Indicator**: Real-time one-line status tracking in header
