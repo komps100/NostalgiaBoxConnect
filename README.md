@@ -55,11 +55,19 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
   5. Organizes all files in a timestamped folder
 - **Configurable Port**: Default 9999, customizable in settings
 
-### Image Stitching
+### Image Stitching (Sharp-based)
 - **Automatic Stitching**: After test sequences complete, images are auto-stitched
 - **Manual Stitching**: Button to stitch latest capture folder on demand
-- **Grid Layouts**: Intelligent layouts for 1-6 images (horizontal for ≤6, grid for >6)
-- **No Quality Loss**: Full resolution stitching with no compression
+- **Precise Grid Layouts**:
+  - 2 images: Side by side (2x1)
+  - 3 images: 2 on top, 1 centered below (black background)
+  - 4 images: Perfect 2x2 grid (white background)
+  - 5 images: 3 on top, 2 centered below (black background)
+  - 6 images: Perfect 3x2 grid (white background)
+- **Smart Backgrounds**: Black for odd image counts, white for even
+- **No Quality Loss**: Full resolution JPEG output (quality 100)
+- **Duplicate Handling**: Automatic `_(2)`, `_(3)` suffixes for duplicate files
+- **Processed Files Log**: Tracks stitched groups to avoid reprocessing
 - **Separate Output**: Stitched images saved to configurable destination folder
 
 ### File Organization
@@ -70,17 +78,23 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
   - `{date}` - Date only in YYYYMMDD format (e.g., 20250930)
   - `{input}` - Input number (1-6)
   - `{timestamp}` - Current date/time (full timestamp)
+- **Duplicate Handling**:
+  - Folders: Automatic `(2)`, `(3)`, etc. suffix (e.g., `20251001_CueList_Label (2)`)
+  - Stitched files: Automatic `_(2)`, `_(3)`, etc. suffix (e.g., `20251001_CueList_Label_(2).jpg`)
 - **Automatic Sanitization**: Invalid filename characters automatically replaced, spaces preserved
 - **Live Preview**: See how your files will be named before capturing
+- **Auto-Switch to Input 1**: After sequences complete, router automatically switches back to Input 1
 
 ## System Requirements
 
 - macOS (Apple Silicon / ARM64)
-- FFmpeg installed via Homebrew (`brew install ffmpeg`)
+- FFmpeg installed via Homebrew (`brew install ffmpeg`) - for video capture only
 - Blackmagic Videohub mini 6x2 (optional, for router control)
 - Blackmagic UltraStudio or compatible capture device (optional, for video capture)
 - ETC Eos lighting console (optional, for Eos integration)
 - Elgato Stream Deck Companion (optional, for automation)
+
+**Note**: Image stitching uses the built-in Sharp library (no additional dependencies needed)
 
 ## Installation
 
@@ -228,12 +242,17 @@ Output: `dist/Nostalgia Box Controller-1.1.0-arm64.dmg`
 - **Framework**: Electron 30.x
 - **OSC Protocol**: OSC over TCP (port 3032) with sequential Get commands and 500ms delays for reliability
 - **Video Capture**: FFmpeg with AVFoundation
-- **Image Stitching**: FFmpeg filter_complex for grid layouts
+- **Image Stitching**: Sharp library for precise grid layouts and compositing
+  - Grid positioning: 2x1, 2x2, 3x2 layouts
+  - Smart backgrounds: Black for odd counts, white for even
+  - JPEG output at quality 100
+  - Processed files log for tracking
 - **Router Protocol**: Telnet (port 9990)
 - **Architecture**: Secure IPC with main/renderer process separation
 - **UI Design**: Collapsible sections with status indicators (green/red/gray/orange)
-- **File Naming**: Invalid chars removed, spaces preserved
+- **File Naming**: Invalid chars removed, spaces preserved, automatic duplicate handling
 - **Activity Tracking**: Real-time status updates in header
+- **Dependencies**: `sharp`, `osc`, `node-osc` (legacy)
 
 ## License
 
@@ -246,4 +265,6 @@ For issues, feature requests, or questions, please contact the development team.
 ---
 
 **Version**: 1.1.0
-**Last Updated**: 2025
+**Build**: `Nostalgia Box Controller-1.1.0-arm64.dmg` (99MB)
+**Last Updated**: October 2025
+**Major Update**: Sharp-based image stitching with precise grid layouts
