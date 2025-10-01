@@ -32,11 +32,6 @@ const elements = {
     disconnectEos: null,
     pingEos: null,
     eosStatus: null,
-    eosDataDisplay: null,
-    eosShowValue: null,
-    eosCueListValue: null,
-    eosCueNumberValue: null,
-    eosCueLabelValue: null,
     folderPreview: null,
     filePreview: null,
     startServer: null,
@@ -44,15 +39,12 @@ const elements = {
     serverStatus: null,
     captureDevice: null,
     refreshDevices: null,
-    previewContainer: null,
-    previewVideo: null,
-    previewStatus: null,
     status: null
 };
 
-let previewStream = null;
-let isPreviewActive = false;
-let detectedFramerate = 30; // Default fallback
+// Diagnostics tracking
+let appStartTime = Date.now();
+let connectionCount = 0;
 
 // Helper functions for naming preview
 function sanitizeFilename(str) {
@@ -116,11 +108,6 @@ function initElements() {
     elements.disconnectEos = document.getElementById('disconnectEos');
     elements.pingEos = document.getElementById('pingEos');
     elements.eosStatus = document.getElementById('eosStatus');
-    elements.eosDataDisplay = document.getElementById('eosDataDisplay');
-    elements.eosShowValue = document.getElementById('eosShowValue');
-    elements.eosCueListValue = document.getElementById('eosCueListValue');
-    elements.eosCueNumberValue = document.getElementById('eosCueNumberValue');
-    elements.eosCueLabelValue = document.getElementById('eosCueLabelValue');
     elements.folderPreview = document.getElementById('folderPreview');
     elements.filePreview = document.getElementById('filePreview');
     elements.startServer = document.getElementById('startServer');
@@ -128,9 +115,6 @@ function initElements() {
     elements.serverStatus = document.getElementById('serverStatus');
     elements.captureDevice = document.getElementById('captureDevice');
     elements.refreshDevices = document.getElementById('refreshDevices');
-    elements.previewContainer = document.getElementById('previewContainer');
-    elements.previewVideo = document.getElementById('previewVideo');
-    elements.previewStatus = document.getElementById('previewStatus');
     elements.status = document.getElementById('status');
 }
 
@@ -181,37 +165,6 @@ async function updateNamingConvention() {
     }
 }
 
-async function captureNow() {
-    console.log('=== RENDERER: Capture button clicked ===');
-    console.log('Current settings:', JSON.stringify(currentSettings, null, 2));
-
-    if (!currentSettings.outputPath) {
-        showStatus('Please select an output folder first', 'error');
-        return;
-    }
-
-    if (!currentSettings.selectedDevice) {
-        showStatus('Please select a capture device first', 'error');
-        return;
-    }
-
-    showStatus('Capturing image...', 'info');
-
-    try {
-        console.log('=== RENDERER: Calling captureStill API ===');
-        const result = await window.electronAPI.captureStill();
-        console.log('=== RENDERER: Capture result ===', JSON.stringify(result, null, 2));
-
-        if (result.success) {
-            showStatus(`Image captured: ${result.filepath}`, 'success');
-        } else {
-            showStatus(`Capture failed: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        console.error('=== RENDERER: Capture error ===', error);
-        showStatus(`Capture error: ${error.message}`, 'error');
-    }
-}
 
 async function updateFolderNaming() {
     const convention = elements.folderNaming.value;
@@ -283,11 +236,9 @@ async function connectEos() {
             elements.pingEos.disabled = false;
             elements.eosStatus.textContent = 'Connected to Eos - Listening for cue data...';
             elements.eosStatus.className = 'preview-status active';
-            elements.eosDataDisplay.style.display = 'block';
             showStatus('Connected to Eos console', 'success');
-
-            // Get initial data
-            updateEosDataDisplay();
+            connectionCount++;
+            updateDiagnostics();
         } else {
             elements.eosStatus.textContent = `Connection failed: ${result.error}`;
             elements.eosStatus.className = 'preview-status error';
@@ -306,8 +257,9 @@ async function disconnectEos() {
         elements.pingEos.disabled = true;
         elements.eosStatus.textContent = 'Disconnected';
         elements.eosStatus.className = 'preview-status';
-        elements.eosDataDisplay.style.display = 'none';
         showStatus('Disconnected from Eos', 'success');
+        connectionCount = Math.max(0, connectionCount - 1);
+        updateDiagnostics();
     } catch (error) {
         showStatus('Failed to disconnect from Eos', 'error');
     }
@@ -327,17 +279,6 @@ async function pingEos() {
     }
 }
 
-async function updateEosDataDisplay() {
-    try {
-        const eosData = await window.electronAPI.getEosData();
-        elements.eosShowValue.textContent = eosData.showName || '-';
-        elements.eosCueListValue.textContent = eosData.cueList || '-';
-        elements.eosCueNumberValue.textContent = eosData.cueNumber || '-';
-        elements.eosCueLabelValue.textContent = eosData.cueLabel || '-';
-    } catch (error) {
-        console.error('Failed to update Eos data display:', error);
-    }
-}
 
 async function startTCPServer() {
     showStatus('Starting TCP server...', 'info');
@@ -349,6 +290,8 @@ async function startTCPServer() {
             elements.serverStatus.textContent = `Server running on port ${result.port}`;
             elements.serverStatus.className = 'preview-status active';
             showStatus(`TCP server started on port ${result.port}`, 'success');
+            connectionCount++;
+            updateDiagnostics();
         } else {
             elements.serverStatus.textContent = `Failed to start: ${result.error}`;
             elements.serverStatus.className = 'preview-status error';
@@ -367,6 +310,8 @@ async function stopTCPServer() {
         elements.serverStatus.textContent = 'Server stopped';
         elements.serverStatus.className = 'preview-status';
         showStatus('TCP server stopped', 'success');
+        connectionCount = Math.max(0, connectionCount - 1);
+        updateDiagnostics();
     } catch (error) {
         showStatus('Failed to stop TCP server', 'error');
     }
@@ -489,127 +434,6 @@ async function refreshDevices() {
 }
 
 
-async function startPreview() {
-    try {
-        // Check if Blackmagic device is selected - skip preview for Blackmagic
-        const selectedValue = elements.captureDevice.value;
-        if (selectedValue && selectedValue !== '') {
-            try {
-                const device = JSON.parse(selectedValue);
-                if (device.isBlackmagic) {
-                    elements.previewStatus.textContent = 'Preview disabled for Blackmagic devices (use capture to test)';
-                    elements.previewStatus.className = 'preview-status';
-                    isPreviewActive = false;
-                    return;
-                }
-            } catch (e) {
-                // Continue with normal preview
-            }
-        }
-
-        elements.previewStatus.textContent = 'Starting preview...';
-        elements.previewStatus.className = 'preview-status';
-
-        let deviceId = null;
-
-        if (selectedValue && selectedValue !== '') {
-            try {
-                const device = JSON.parse(selectedValue);
-                if (device.name) {
-                    // Match by device name (FFmpeg and browser APIs have different indices)
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
-                    console.log('Browser video devices:', videoDevices.map(d => d.label));
-                    console.log('Looking for device:', device.name);
-
-                    // Find matching device by name (try exact match first, then partial match)
-                    let matchingDevice = videoDevices.find(d => d.label === device.name);
-
-                    if (!matchingDevice) {
-                        // Try normalized comparison (case-insensitive, trimmed)
-                        const normalizedTarget = device.name.toLowerCase().trim();
-                        matchingDevice = videoDevices.find(d =>
-                            d.label.toLowerCase().trim() === normalizedTarget
-                        );
-                    }
-
-                    if (matchingDevice) {
-                        deviceId = matchingDevice.deviceId;
-                        console.log(`Matched device "${device.name}" to browser device "${matchingDevice.label}" (${deviceId})`);
-                    } else {
-                        console.log(`Could not find device "${device.name}" in browser devices:`, videoDevices.map(d => d.label));
-                    }
-                }
-            } catch (e) {
-                console.log('Could not parse selected device, using default');
-            }
-        }
-
-        const constraints = {
-            video: deviceId ? { deviceId: { exact: deviceId } } : true,
-            audio: false
-        };
-
-        previewStream = await navigator.mediaDevices.getUserMedia(constraints);
-        elements.previewVideo.srcObject = previewStream;
-
-        // Detect framerate from video track
-        const videoTrack = previewStream.getVideoTracks()[0];
-        const settings = videoTrack.getSettings();
-        if (settings.frameRate) {
-            let rawFps = settings.frameRate;
-
-            // Map to standard framerates (20fps minimum)
-            if (rawFps < 20) {
-                detectedFramerate = 30; // Default fallback
-            } else if (rawFps >= 23.9 && rawFps < 24.1) {
-                detectedFramerate = 24;
-            } else if (rawFps >= 23.95 && rawFps < 23.99) {
-                detectedFramerate = 23.98; // 23.976 rounded
-            } else if (rawFps >= 29.9 && rawFps < 30.1) {
-                detectedFramerate = 30;
-            } else if (rawFps >= 29.95 && rawFps < 29.99) {
-                detectedFramerate = 29.97;
-            } else {
-                detectedFramerate = Math.round(rawFps * 100) / 100; // Round to 2 decimals
-            }
-
-            console.log(`Detected framerate: ${rawFps}fps, using: ${detectedFramerate}fps`);
-            await window.electronAPI.setFramerate(detectedFramerate);
-            elements.previewStatus.textContent = `Preview active (${detectedFramerate}fps)`;
-        } else {
-            elements.previewStatus.textContent = 'Preview active';
-        }
-        elements.previewStatus.className = 'preview-status active';
-
-        isPreviewActive = true;
-
-    } catch (error) {
-        console.error('Preview error:', error);
-        elements.previewStatus.textContent = `Preview failed: ${error.message}`;
-        elements.previewStatus.className = 'preview-status error';
-
-        if (error.name === 'NotAllowedError') {
-            elements.previewStatus.textContent = 'Camera access denied. Please allow camera access in System Preferences.';
-        } else if (error.name === 'NotFoundError') {
-            elements.previewStatus.textContent = 'Selected camera not found. Try refreshing devices.';
-        }
-    }
-}
-
-function stopPreview() {
-    if (previewStream) {
-        previewStream.getTracks().forEach(track => track.stop());
-        previewStream = null;
-    }
-
-    elements.previewVideo.srcObject = null;
-    elements.previewStatus.textContent = '';
-    elements.previewStatus.className = 'preview-status';
-
-    isPreviewActive = false;
-}
 
 async function onDeviceChange() {
     const selectedValue = elements.captureDevice.value;
@@ -618,7 +442,6 @@ async function onDeviceChange() {
         currentSettings.selectedDevice = null;
         await window.electronAPI.selectDevice(null);
         showStatus('No device selected', 'info');
-        stopPreview();
         updateStatusIndicators();
     } else {
         try {
@@ -626,10 +449,6 @@ async function onDeviceChange() {
             currentSettings.selectedDevice = device;
             await window.electronAPI.selectDevice(device);
             showStatus(`Selected device: ${device.name}`, 'success');
-
-            // Restart preview
-            stopPreview();
-            setTimeout(() => startPreview(), 500);
             updateStatusIndicators();
         } catch (error) {
             console.error('Error selecting device:', error);
@@ -653,30 +472,6 @@ async function selectStitchedOutputPath() {
     }
 }
 
-async function manualStitch() {
-    if (!currentSettings.outputPath) {
-        showStatus('Please configure Capture Images Folder first', 'error');
-        return;
-    }
-
-    if (!currentSettings.stitchedOutputPath) {
-        showStatus('Please configure Stitched Images Folder first', 'error');
-        return;
-    }
-
-    showStatus('Finding latest folder and stitching images...', 'info');
-
-    try {
-        const result = await window.electronAPI.stitchLatestFolder();
-        if (result.success) {
-            showStatus(`Successfully stitched ${result.imageCount} images to ${result.filepath}`, 'success');
-        } else {
-            showStatus(`Stitch failed: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        showStatus(`Stitch error: ${error.message}`, 'error');
-    }
-}
 
 function initEventListeners() {
     document.getElementById('selectPath').addEventListener('click', selectOutputPath);
@@ -707,15 +502,10 @@ function initEventListeners() {
         currentEosData = { ...eosData };
 
         if (eosData.connected) {
-            let statusText = `Connected | Cue List: ${eosData.cueList || 'N/A'} | Cue: ${eosData.cueNumber || 'N/A'} | Label: ${eosData.cueLabel || 'N/A'}`;
+            const cueListName = eosData.cueListName || eosData.cueList || 'N/A';
+            let statusText = `Connected | Cue List: ${cueListName} | Cue: ${eosData.cueNumber || 'N/A'} | Label: ${eosData.cueLabel || 'N/A'}`;
             elements.eosStatus.textContent = statusText;
             elements.eosStatus.className = 'preview-status active';
-
-            // Update the data display
-            elements.eosShowValue.textContent = eosData.showName || '-';
-            elements.eosCueListValue.textContent = eosData.cueList || '-';
-            elements.eosCueNumberValue.textContent = eosData.cueNumber || '-';
-            elements.eosCueLabelValue.textContent = eosData.cueLabel || '-';
         }
 
         // Update naming preview with new Eos data
@@ -751,37 +541,6 @@ function initEventListeners() {
     });
 }
 
-async function runTestSequence(inputs = [1,2,3,4,5,6]) {
-    if (!currentSettings.outputPath) {
-        showStatus('Please select an output folder first', 'error');
-        return;
-    }
-
-    if (!currentSettings.selectedDevice) {
-        showStatus('Please select a capture device first', 'error');
-        return;
-    }
-
-    showStatus(`Starting test sequence for Output 1 (Inputs ${inputs.join(',')})...`, 'info');
-
-    try {
-        const result = await window.electronAPI.runTestSequence(inputs);
-
-        // Track the last capture folder for manual stitching (use actual path returned from main process)
-        if (result.success && result.captureFolder) {
-            lastCaptureFolder = result.captureFolder;
-            console.log('Capture folder tracked:', lastCaptureFolder);
-        }
-
-        if (result.success) {
-            showStatus(`Test sequence complete! ${result.captured} of ${result.total} captures succeeded.`, 'success');
-        } else {
-            showStatus(`Test sequence failed: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        showStatus(`Test sequence error: ${error.message}`, 'error');
-    }
-}
 
 function updateStatusIndicators() {
     // Output Settings - green if both paths are set
@@ -803,14 +562,11 @@ function updateStatusIndicators() {
         captureDeviceStatus.className = 'status-indicator gray';
     }
 
-    // Router Control & Settings - green if router IP is set
-    const routerControlStatus = document.getElementById('routerControlStatus');
+    // Router Settings - green if router IP is set
     const routerSettingsStatus = document.getElementById('routerSettingsStatus');
     if (currentSettings.routerIP && currentSettings.routerIP !== '') {
-        routerControlStatus.className = 'status-indicator green';
         routerSettingsStatus.className = 'status-indicator green';
     } else {
-        routerControlStatus.className = 'status-indicator gray';
         routerSettingsStatus.className = 'status-indicator gray';
     }
 
@@ -835,21 +591,122 @@ function toggleSection(sectionId) {
     if (content.classList.contains('expanded')) {
         content.classList.remove('expanded');
         arrow.classList.remove('expanded');
-
-        // Stop preview when collapsing capture device section
-        if (sectionId === 'captureDevice') {
-            stopPreview();
-        }
     } else {
         content.classList.add('expanded');
         arrow.classList.add('expanded');
-
-        // Start preview when expanding capture device section
-        if (sectionId === 'captureDevice' && currentSettings.selectedDevice) {
-            setTimeout(() => startPreview(), 300);
-        }
     }
 }
+
+// Particle Animation
+let particleCanvas = null;
+let particleCtx = null;
+let particles = [];
+let animationFrame = null;
+
+class Particle {
+    constructor(canvas) {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.radius = Math.random() * 2 + 1;
+        this.opacity = Math.random() * 0.5 + 0.3;
+    }
+
+    update(canvas) {
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+        if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+        ctx.fill();
+    }
+}
+
+function initParticleAnimation() {
+    particleCanvas = document.getElementById('particleCanvas');
+    if (!particleCanvas) return;
+
+    particleCanvas.width = particleCanvas.offsetWidth;
+    particleCanvas.height = particleCanvas.offsetHeight;
+    particleCtx = particleCanvas.getContext('2d');
+
+    // Create particles
+    particles = [];
+    for (let i = 0; i < 50; i++) {
+        particles.push(new Particle(particleCanvas));
+    }
+
+    animateParticles();
+}
+
+function animateParticles() {
+    if (!particleCtx || !particleCanvas) return;
+
+    particleCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+
+    particles.forEach(particle => {
+        particle.update(particleCanvas);
+        particle.draw(particleCtx);
+    });
+
+    // Draw connections
+    particles.forEach((p1, i) => {
+        particles.slice(i + 1).forEach(p2 => {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 100) {
+                particleCtx.beginPath();
+                particleCtx.moveTo(p1.x, p1.y);
+                particleCtx.lineTo(p2.x, p2.y);
+                particleCtx.strokeStyle = `rgba(255, 255, 255, ${0.2 * (1 - distance / 100)})`;
+                particleCtx.stroke();
+            }
+        });
+    });
+
+    animationFrame = requestAnimationFrame(animateParticles);
+}
+
+function stopParticleAnimation() {
+    if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+    }
+}
+
+function updateDiagnostics() {
+    const uptimeElement = document.getElementById('uptimeValue');
+    const statusElement = document.getElementById('systemStatus');
+    const connectionElement = document.getElementById('connectionCount');
+
+    if (uptimeElement) {
+        const uptime = Date.now() - appStartTime;
+        const hours = Math.floor(uptime / 3600000);
+        const minutes = Math.floor((uptime % 3600000) / 60000);
+        const seconds = Math.floor((uptime % 60000) / 1000);
+        uptimeElement.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    if (statusElement) {
+        statusElement.textContent = 'Active';
+    }
+
+    if (connectionElement) {
+        connectionElement.textContent = connectionCount;
+    }
+}
+
+// Update diagnostics every second
+setInterval(updateDiagnostics, 1000);
 
 async function init() {
     initElements();
@@ -857,7 +714,8 @@ async function init() {
     await loadSettings();
     await loadDevices();
 
-    // Don't start preview automatically - wait for section to be opened
+    // Start particle animation immediately
+    setTimeout(() => initParticleAnimation(), 100);
 
     // Auto-connect to Eos if IP is configured
     if (currentSettings.eosIP && currentSettings.eosIP.trim() !== '') {
@@ -871,6 +729,9 @@ async function init() {
     window.electronAPI.onSequenceProgress((progress) => {
         showStatus(progress.message, progress.type || 'info');
     });
+
+    // Start diagnostics update
+    updateDiagnostics();
 }
 
 init();

@@ -9,35 +9,38 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
 
         .container {
             max-width: 600px;
             margin: 0 auto;
-            background: white;
+            background: rgba(255, 255, 255, 0.95);
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
         }
 
         h1 {
-            color: #333;
+            color: #764ba2;
             text-align: center;
             margin-bottom: 30px;
+            font-weight: 600;
         }
 
         .section {
             margin-bottom: 25px;
             padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background-color: #fafafa;
+            border: 1px solid rgba(118, 75, 162, 0.2);
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
         }
 
         .section h3 {
             margin-top: 0;
-            color: #555;
+            color: #764ba2;
         }
 
         label {
@@ -68,7 +71,7 @@
         }
 
         button {
-            background-color: #007AFF;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             padding: 10px 20px;
@@ -78,10 +81,12 @@
             font-weight: 500;
             margin-right: 10px;
             margin-bottom: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
         button:hover {
-            background-color: #0056CC;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(118, 75, 162, 0.4);
         }
 
         button:disabled {
@@ -233,7 +238,7 @@
         .collapse-arrow {
             transition: transform 0.2s ease;
             font-size: 16px;
-            color: #555;
+            color: #764ba2;
         }
 
         .collapse-arrow.expanded {
@@ -275,13 +280,84 @@
             background-color: #FF9500;
             box-shadow: 0 0 4px #FF9500;
         }
+
+        .diagnostics-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #particleCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .diagnostics-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            z-index: 1;
+        }
+
+        .diagnostic-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .diagnostic-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .diagnostic-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px;">
-            <h1 style="margin: 0;">Nostalgia Box Controller</h1>
-            <div id="activityIndicator" style="font-size: 12px; color: #666; font-family: monospace; max-width: 300px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+        <h1 style="text-align: center; margin-bottom: 20px;">Nostalgia Box Controller</h1>
+
+        <!-- System Diagnostics -->
+        <div style="margin-bottom: 30px;">
+            <div class="diagnostics-container">
+                <canvas id="particleCanvas"></canvas>
+                <div class="diagnostics-overlay">
+                    <div class="diagnostic-item">
+                        <span class="diagnostic-label">Uptime</span>
+                        <span class="diagnostic-value" id="uptimeValue">00:00:00</span>
+                    </div>
+                    <div class="diagnostic-item">
+                        <span class="diagnostic-label">Status</span>
+                        <span class="diagnostic-value" id="systemStatus">Active</span>
+                    </div>
+                    <div class="diagnostic-item">
+                        <span class="diagnostic-label">Connections</span>
+                        <span class="diagnostic-value" id="connectionCount">0</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Output Settings -->
@@ -344,41 +420,6 @@
             </div>
         </div>
 
-        <!-- Capture Control -->
-        <div class="section">
-            <h3>Capture Control</h3>
-            <button class="capture-button" onclick="captureNow()">Capture Image</button>
-            <div class="help-text">
-                Captures current input to the selected folder
-            </div>
-
-            <div style="margin-top: 20px;">
-                <button id="manualStitch" style="background-color: #FF9500; width: 100%; padding: 15px; font-size: 16px; font-weight: 600;" onclick="manualStitch()">Stitch Latest Folder</button>
-                <div class="help-text">
-                    Automatically finds and stitches the most recent folder in Capture Images Folder
-                </div>
-            </div>
-
-            <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #ddd;">
-                <div class="collapsible-header" onclick="toggleSection('testSequences')" style="margin-bottom: 10px;">
-                    <span class="collapse-arrow" id="testSequencesArrow">▶</span>
-                    <h4 style="margin: 0; color: #555;">Test Sequences</h4>
-                </div>
-                <div class="collapsible-content" id="testSequencesContent">
-                    <div class="help-text" style="margin-bottom: 10px;">
-                        Automatically switch and capture multiple inputs for Output 1
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-                        <button class="test-button" onclick="runTestSequence([6])" style="font-size: 14px; padding: 12px 20px;">Input 6</button>
-                        <button class="test-button" onclick="runTestSequence([1,6])" style="font-size: 14px; padding: 12px 20px;">Inputs 1,6</button>
-                        <button class="test-button" onclick="runTestSequence([1,2,6])" style="font-size: 14px; padding: 12px 20px;">Inputs 1,2,6</button>
-                        <button class="test-button" onclick="runTestSequence([1,2,3,6])" style="font-size: 14px; padding: 12px 20px;">Inputs 1,2,3,6</button>
-                        <button class="test-button" onclick="runTestSequence([1,2,3,4,6])" style="font-size: 14px; padding: 12px 20px;">Inputs 1,2,3,4,6</button>
-                        <button class="test-button" onclick="runTestSequence([1,2,3,4,5,6])" style="font-size: 14px; padding: 12px 20px;">Inputs 1,2,3,4,5,6</button>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Capture Device -->
         <div class="section">
@@ -397,47 +438,9 @@
                 <div class="help-text">
                     Select your video capture device
                 </div>
-
-                <div class="preview-container" id="previewContainer">
-                    <h4>Live Preview</h4>
-                    <video id="previewVideo" autoplay muted></video>
-                    <div class="preview-status" id="previewStatus"></div>
-                </div>
             </div>
         </div>
 
-        <!-- Router Control -->
-        <div class="section">
-            <div class="collapsible-header" onclick="toggleSection('routerControl')">
-                <span class="collapse-arrow" id="routerControlArrow">▶</span>
-                <h3 style="margin: 0;">Router Control</h3>
-                <div class="status-indicator gray" id="routerControlStatus"></div>
-            </div>
-
-            <div class="collapsible-content" id="routerControlContent">
-                <h4>Output 1 Control</h4>
-                <div class="help-text">Set which input goes to Output 1:</div>
-                <div class="output-buttons">
-                    <button class="input-button" onclick="switchInput(1, 1)">Input 1 → Output 1</button>
-                    <button class="input-button" onclick="switchInput(2, 1)">Input 2 → Output 1</button>
-                    <button class="input-button" onclick="switchInput(3, 1)">Input 3 → Output 1</button>
-                    <button class="input-button" onclick="switchInput(4, 1)">Input 4 → Output 1</button>
-                    <button class="input-button" onclick="switchInput(5, 1)">Input 5 → Output 1</button>
-                    <button class="input-button" onclick="switchInput(6, 1)">Input 6 → Output 1</button>
-                </div>
-
-                <h4 style="margin-top: 20px;">Output 2 Control</h4>
-                <div class="help-text">Set which input goes to Output 2:</div>
-                <div class="output-buttons">
-                    <button class="input-button" onclick="switchInput(1, 2)">Input 1 → Output 2</button>
-                    <button class="input-button" onclick="switchInput(2, 2)">Input 2 → Output 2</button>
-                    <button class="input-button" onclick="switchInput(3, 2)">Input 3 → Output 2</button>
-                    <button class="input-button" onclick="switchInput(4, 2)">Input 4 → Output 2</button>
-                    <button class="input-button" onclick="switchInput(5, 2)">Input 5 → Output 2</button>
-                    <button class="input-button" onclick="switchInput(6, 2)">Input 6 → Output 2</button>
-                </div>
-            </div>
-        </div>
 
         <!-- Router Settings -->
         <div class="section">
@@ -474,24 +477,14 @@
                 <button id="disconnectEos" disabled>Disconnect</button>
                 <button id="pingEos" disabled>Send Ping</button>
                 <div class="preview-status" id="eosStatus"></div>
-
-                <div id="eosDataDisplay" style="display:none; margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 4px; font-family: monospace; font-size: 12px;">
-                    <strong>Current Eos Data:</strong><br>
-                    <div style="margin-top: 5px;">
-                        Show: <span id="eosShowValue">-</span><br>
-                        Cue List: <span id="eosCueListValue">-</span><br>
-                        Cue Number: <span id="eosCueNumberValue">-</span><br>
-                        Cue Label: <span id="eosCueLabelValue">-</span><br>
-                    </div>
-                </div>
             </div>
         </div>
 
-        <!-- Stream Deck Control -->
+        <!-- TCP/IP Remote Control -->
         <div class="section">
             <div class="collapsible-header" onclick="toggleSection('streamDeck')">
                 <span class="collapse-arrow" id="streamDeckArrow">▶</span>
-                <h3 style="margin: 0;">Stream Deck Control</h3>
+                <h3 style="margin: 0;">TCP/IP Remote Control</h3>
                 <div class="status-indicator gray" id="streamDeckStatus"></div>
             </div>
 
@@ -499,7 +492,7 @@
                 <label for="tcpPort">TCP Server Port:</label>
                 <input type="text" id="tcpPort" placeholder="9999" value="9999">
                 <div class="help-text">
-                    Port for Stream Deck Companion to send commands (default: 9999)
+                    Port for remote control commands (default: 9999)
                 </div>
                 <button id="startServer">Start Server</button>
                 <button id="stopServer" disabled>Stop Server</button>
