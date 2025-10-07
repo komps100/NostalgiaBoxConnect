@@ -490,6 +490,13 @@ function initEventListeners() {
     elements.captureDevice.addEventListener('change', onDeviceChange);
     elements.refreshDevices.addEventListener('click', refreshDevices);
 
+    // Multi-input capture listeners
+    const inputButtons = document.querySelectorAll('.input-select-button');
+    inputButtons.forEach(button => {
+        button.addEventListener('click', toggleInputSelection);
+    });
+    document.getElementById('captureSequenceButton').addEventListener('click', captureSelectedInputs);
+
     // Update preview when naming conventions change
     elements.namingConvention.addEventListener('input', updateNamingPreviews);
     elements.folderNaming.addEventListener('input', updateNamingPreviews);
@@ -697,6 +704,7 @@ function updateDiagnostics() {
     const showNameElement = document.getElementById('showName');
     const cueListDisplay = document.getElementById('cueListDisplay');
     const cueDisplay = document.getElementById('cueDisplay');
+    const connectionCountElement = document.getElementById('connectionCount');
 
     if (uptimeElement) {
         const uptime = Date.now() - appStartTime;
@@ -704,6 +712,11 @@ function updateDiagnostics() {
         const minutes = Math.floor((uptime % 3600000) / 60000);
         const seconds = Math.floor((uptime % 60000) / 1000);
         uptimeElement.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    // Update connection count
+    if (connectionCountElement) {
+        connectionCountElement.textContent = connectionCount;
     }
 
     // Update status pill and dot based on connection status
@@ -743,6 +756,45 @@ function updateDiagnostics() {
 // Update diagnostics every second
 setInterval(updateDiagnostics, 1000);
 
+function toggleInputSelection(event) {
+    const button = event.target;
+    button.classList.toggle('selected');
+}
+
+async function captureSelectedInputs() {
+    const selectedButtons = document.querySelectorAll('.input-select-button.selected');
+
+    if (selectedButtons.length === 0) {
+        showStatus('Please select at least one input to capture', 'error');
+        return;
+    }
+
+    // Get selected input numbers
+    const inputs = Array.from(selectedButtons).map(btn => parseInt(btn.dataset.input)).sort((a, b) => a - b);
+
+    showStatus(`Starting capture sequence: ${inputs.join(', ')}`, 'info');
+
+    // Disable capture button during sequence
+    const captureButton = document.getElementById('captureSequenceButton');
+    captureButton.disabled = true;
+    captureButton.textContent = 'Capturing...';
+
+    try {
+        const result = await window.electronAPI.runTestSequence(inputs);
+
+        if (result.success) {
+            showStatus(`Sequence complete: ${result.captured} captured, ${result.failed} failed`, 'success');
+        } else {
+            showStatus(`Sequence failed: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`Capture error: ${error.message}`, 'error');
+    } finally {
+        captureButton.disabled = false;
+        captureButton.textContent = 'Capture Selected Inputs';
+    }
+}
+
 async function init() {
     initElements();
     initEventListeners();
@@ -765,8 +817,29 @@ async function init() {
         showStatus(progress.message, progress.type || 'info');
     });
 
+    // Listen for TCP commands to update UI selection
+    window.electronAPI.onTCPCommandReceived((inputs) => {
+        updateInputSelection(inputs);
+    });
+
     // Start diagnostics update
     updateDiagnostics();
+}
+
+function updateInputSelection(inputs) {
+    // Clear all selections first
+    const allButtons = document.querySelectorAll('.input-select-button');
+    allButtons.forEach(btn => btn.classList.remove('selected'));
+
+    // Select the inputs from the TCP command
+    inputs.forEach(inputNumber => {
+        const button = document.querySelector(`.input-select-button[data-input="${inputNumber}"]`);
+        if (button) {
+            button.classList.add('selected');
+        }
+    });
+
+    showStatus(`TCP command received: ${inputs.join(', ')}`, 'info');
 }
 
 init();

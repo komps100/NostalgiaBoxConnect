@@ -751,6 +751,11 @@ async function handleSequenceCommand(command, socket) {
       return;
     }
 
+    // Send inputs to renderer to update UI selection
+    if (mainWindow) {
+      mainWindow.webContents.send('tcp-command-received', inputs);
+    }
+
     isSequenceRunning = true;
     socket.write(`Starting sequence: ${inputs.join(',')}\n`);
 
@@ -781,8 +786,8 @@ async function handleSequenceCommand(command, socket) {
 
         socket.write(`Capturing input ${input}...\n`);
 
-        // Capture image with shared folder
-        const result = await captureStill(input, captureFolder, timestamp);
+        // Capture image with retry logic and timeout to prevent hanging
+        const result = await captureWithRetry(input, 2, 1000, captureFolder, timestamp);
 
         if (result.success) {
           socket.write(`✓ Captured input ${input} to ${result.filepath}\n`);

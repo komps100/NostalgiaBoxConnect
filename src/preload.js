@@ -27,5 +27,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectStitchedOutputPath: () => ipcRenderer.invoke('select-stitched-output-path'),
   onEosStatusUpdate: (callback) => ipcRenderer.on('eos-status-update', (event, data) => callback(data)),
   onTCPServerStatus: (callback) => ipcRenderer.on('tcp-server-status', (event, data) => callback(data)),
-  onSequenceProgress: (callback) => ipcRenderer.on('sequence-progress', (event, data) => callback(data))
+  onSequenceProgress: (callback) => ipcRenderer.on('sequence-progress', (event, data) => callback(data)),
+  onTCPCommandReceived: (callback) => ipcRenderer.on('tcp-command-received', (event, data) => callback(data))
 });
