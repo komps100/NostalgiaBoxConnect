@@ -36,23 +36,28 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 - **Live Preview**: See how your folder and file names will appear with current Eos data
 - **TCP Connection**: Reliable OSC over TCP (port 3032)
 
-### Test Sequences & Automation
-- **Built-in Test Buttons**: Pre-configured capture sequences for common input combinations
-  - Single input: Input 6
-  - Multi-input: 1,6 / 1,2,6 / 1,2,3,6 / 1,2,3,4,6 / 1,2,3,4,5,6
+### Multi-Input Capture (NEW in v1.4.0)
+- **Visual Input Selection**: 6 clickable buttons (Input 1-6) for selecting multiple inputs
+- **Toggle Selection**: Click to select/deselect inputs with purple gradient highlighting
+- **Capture Button**: "Capture Selected Inputs" triggers automated sequence for all selected inputs
+- **Real-time Feedback**: Progress updates and status messages during capture
 - **Intelligent Retry Logic**: Automatically skips inputs with no video source (1001ms timeout)
 - **Automatic Stitching**: After sequence completes, images are automatically stitched into a single composite
+- **TCP Command Sync**: UI buttons automatically update to show inputs from last TCP/Stream Deck command
 
-### Stream Deck Automation
+### Stream Deck Automation (Enhanced in v1.4.0)
 - **TCP Server**: Listens for commands from Elgato Stream Deck Companion
 - **Auto-Start**: TCP server starts automatically 5 seconds after EOS connection
 - **Sequence Automation**: Send comma-separated input sequences (e.g., "1,2,6")
+- **Visual Feedback**: UI input buttons automatically update to show last TCP command received
+- **Timeout Protection**: 1001ms timeout per input with auto-skip on missing inputs (fixed in v1.4.0)
 - **Automated Workflow**:
   1. Stream Deck sends sequence command
-  2. App switches router to each input
-  3. Captures image for each input
-  4. Auto-stitches captured images into composite
-  5. Organizes all files in a timestamped folder
+  2. UI updates to show selected inputs (v1.4.0)
+  3. App switches router to each input
+  4. Captures image for each input (with retry logic)
+  5. Auto-stitches captured images into composite
+  6. Organizes all files in a timestamped folder
 - **Configurable Port**: Default 9999, customizable in settings
 
 ### Image Stitching (Sharp-based)
@@ -105,7 +110,7 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 
 2. **Install Nostalgia Box Controller**:
    - Download the DMG from the releases page
-   - Open `Nostalgia Box Controller-1.3.0-arm64.dmg`
+   - Open `Nostalgia Box Controller-1.4.0-arm64.dmg`
    - Drag the app to your Applications folder
    - Right-click the app and select "Open" (first launch only, due to code signing)
 
@@ -235,7 +240,7 @@ npm run dev        # With dev tools
 npm run build
 ```
 
-Output: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
+Output: `dist/Nostalgia Box Controller-1.4.0-arm64.dmg`
 
 ## Technical Details
 
@@ -250,8 +255,9 @@ Output: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
 - **Router Protocol**: Telnet (port 9990)
 - **Architecture**: Secure IPC with main/renderer process separation
 - **UI Design**: Purple gradient theme with ambient particle animation
+  - Multi-input capture interface with visual selection (v1.4.0)
   - Collapsible settings sections with status indicators
-  - Real-time show/cue display with uptime and connection count
+  - Real-time show/cue display with uptime and connection count (fixed in v1.4.0)
   - Ambient drift particle animation (90 particles, slow organic movement)
 - **File Naming**: Invalid chars removed, spaces preserved, automatic duplicate handling
 - **Dependencies**: `sharp`, `osc`, `node-osc` (legacy)
@@ -266,7 +272,7 @@ For issues, feature requests, or questions, please contact the development team.
 
 ---
 
-**Version**: 1.3.0
-**Build**: `Nostalgia Box Controller-1.3.0-arm64.dmg`
+**Version**: 1.4.0
+**Build**: `Nostalgia Box Controller-1.4.0-arm64.dmg`
 **Last Updated**: October 2025
-**Major Update**: UI redesign with purple gradient theme and ambient particle animation
+**Major Update**: Multi-input capture UI with visual selection, connection counter fix, TCP timeout protection

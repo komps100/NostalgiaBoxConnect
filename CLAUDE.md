@@ -3,8 +3,8 @@
 ## Project Overview
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
-## Current Status: ✅ WORKING (v1.3.0)
-All features working. Clean, minimal UI with purple gradient design, ambient particle animation, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, and TCP/IP remote control.
+## Current Status: ✅ WORKING (v1.4.0)
+All features working. Clean, minimal UI with purple gradient design, ambient particle animation, multi-input capture interface, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, and TCP/IP remote control with visual feedback.
 
 ### Quick Start for Next Session
 
@@ -15,14 +15,14 @@ All features working. Clean, minimal UI with purple gradient design, ambient par
 - ✅ **Status Display** - Real-time show/cue information with uptime tracking
 
 #### Latest Build
-- **File**: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
-- **Major Changes**: UI redesign, removed test sequences and router control from UI
-- **Breaking Change**: None - core functionality maintained
+- **File**: `dist/Nostalgia Box Controller-1.4.0-arm64.dmg`
+- **Major Changes**: Multi-input capture UI, connection counter fix, TCP timeout improvements
+- **Breaking Change**: None - all features maintained and improved
 
-#### Recent Major Update (v1.3.0)
-- **What Changed**: Complete UI redesign with focus on simplicity
-- **Why**: Streamline interface, improve visual design, reduce clutter
-- **Result**: Clean, professional UI with ambient particle animation
+#### Recent Major Update (v1.4.0)
+- **What Changed**: Added multi-input capture UI, fixed connection counter, improved TCP timeout handling
+- **Why**: Better user experience, visual feedback for TCP commands, prevent hanging on missing inputs
+- **Result**: Intuitive input selection interface with real-time status updates
 
 #### Key Files
 - `src/main.js` - Main process, capture, OSC, TCP server
@@ -46,12 +46,13 @@ All features working. Clean, minimal UI with purple gradient design, ambient par
 - Secure IPC communication via preload script
 - Built for macOS ARM64 systems
 
-### ✅ User Interface (v1.3.0)
+### ✅ User Interface (v1.4.0)
 - Clean, minimal interface with purple gradient theme (#667eea to #764ba2)
 - Ambient particle animation (slow-drift style) in status display
+- **Multi-Input Capture Section**: Visual interface with 6 selectable input buttons
 - Collapsible settings sections (all hidden by default on launch)
 - Status indicators (green/red/gray/orange dots) for each system component
-- Real-time show/cue information display with uptime and connection count
+- Real-time show/cue information display with uptime and connection count (fixed in v1.4.0)
 - Status messages appear directly under main display (not at bottom)
 - Improved spacing and consistent button padding (8px 16px)
 
@@ -149,18 +150,29 @@ All features working. Clean, minimal UI with purple gradient design, ambient par
 - **Naming Preview**: Live preview of folder/file names with current Eos data
 - **Filename Sanitization**: Removes invalid characters (`/ \ : * ? " < > | ,`) but preserves spaces
 
-### ✅ Stream Deck Companion Integration (NEW in v1.1.0)
+### ✅ Multi-Input Capture UI (NEW in v1.4.0)
+- **Visual Input Selection**: 6 clickable buttons (Input 1-6) below status display
+- **Toggle Selection**: Click to select/deselect inputs with purple gradient highlighting
+- **Capture Button**: Triggers automated sequence for all selected inputs
+- **Real-time Feedback**: Progress updates and status messages during capture
+- **Timeout Protection**: Uses 1001ms timeout per input with auto-skip on failure (fixed in v1.4.0)
+- **TCP Command Sync**: UI automatically updates to show inputs from last TCP command (NEW in v1.4.0)
+- **Unified Interface**: Same automation logic as TCP/Stream Deck remote control
+
+### ✅ Stream Deck Companion Integration (v1.1.0, enhanced in v1.4.0)
 - **TCP Server**: Listens for commands from Stream Deck Companion
 - **Auto-Start**: Automatically starts 5 seconds after successful EOS connection
 - **Auto-Stop**: Automatically stops when EOS disconnects
 - **Sequence Automation**: Process comma-separated input sequences (e.g., "1,2,6")
+- **Visual Feedback**: UI input buttons update to show last TCP command received (NEW in v1.4.0)
 - **Automated Workflow**:
   1. Receives sequence command from Stream Deck
-  2. For each input: switches router → waits → captures image
-  3. Auto-stitches all captured images into composite
-  4. Returns real-time feedback to Stream Deck
+  2. Updates UI to show selected inputs (v1.4.0)
+  3. For each input: switches router → waits → captures image (with 1001ms timeout)
+  4. Auto-stitches all captured images into composite
+  5. Returns real-time feedback to Stream Deck
 - **Folder Organization**: Each sequence creates a dated folder with all captures and stitched image
-- **Error Handling**: Continues sequence even if individual captures fail
+- **Error Handling**: Continues sequence even if individual captures fail (improved in v1.4.0)
 - **Configurable Port**: Default 9999, customizable in UI
 
 ### ✅ Build System
@@ -304,7 +316,7 @@ npm run dev
 npm run build
 
 # Package location
-dist/Nostalgia Box Controller-1.3.0-arm64.dmg
+dist/Nostalgia Box Controller-1.4.0-arm64.dmg
 ```
 
 ## Next Session Focus Areas
@@ -407,9 +419,16 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.1.0 - All features working. Sharp-based image stitching with reliable grid layouts, test sequences, collapsible UI with status indicators, EOS OSC with optimized delays, auto-reconnect, Stream Deck auto-start, and activity indicator. Replaced FFmpeg stitching with Sharp library for better reliability and precise grid positioning.
+v1.4.0 - All features working. Multi-input capture UI with visual selection, connection counter display fixed, TCP timeout protection (1001ms with auto-skip), TCP command visual feedback, improved error handling. Clean purple gradient UI with ambient particle animation, Sharp-based image stitching, EOS OSC integration with optimized delays, and Stream Deck remote control.
 
-## Recent Fixes (Latest Build - v1.1.0)
+## Recent Fixes (Latest Build - v1.4.0)
+- ✅ **Connection Counter Display**: Now properly shows number of active connections (EOS + TCP server)
+- ✅ **TCP Timeout Protection**: Fixed 30s hang issue, now uses 1001ms timeout with auto-skip on missing inputs
+- ✅ **Multi-Input Capture UI**: Added visual interface for selecting and capturing multiple inputs
+- ✅ **TCP Command Sync**: UI buttons automatically update to show inputs from last TCP command
+- ✅ **Improved Error Handling**: Sequences continue gracefully when inputs have no video source
+
+## Previous Fixes (v1.1.0)
 - ✅ **Sharp-Based Stitching**: Replaced FFmpeg with Sharp library for reliable grid layouts
 - ✅ **Grid Positioning**: Precise 2x2 and 3x2 layouts with centered positioning for odd counts
 - ✅ **Smart Backgrounds**: Black background for odd image counts, white for even
@@ -520,3 +539,51 @@ v1.1.0 - All features working. Sharp-based image stitching with reliable grid la
 - **File**: `dist/Nostalgia Box Controller-1.3.0-arm64.dmg`
 - **Changes**: UI-only redesign, no breaking changes
 - **Dependencies**: Same as v1.1.0 (sharp, osc, electron)
+
+## Restore Point - v1.4.0 (Working State - Multi-Input Capture & Fixes)
+
+### ✅ What Changed in v1.4.0
+**Bug Fixes:**
+- **Connection Counter Fixed**: Now properly displays number of active connections (EOS + TCP server)
+- **TCP Command Timeout Fixed**: Changed from potential 30s hang to 1001ms timeout with auto-skip on missing inputs
+- Uses `captureWithRetry()` instead of direct `captureStill()` for TCP commands
+
+**New Features:**
+- **Multi-Input Capture UI**: Visual interface for selecting and capturing multiple inputs
+  - 6 clickable input buttons (Input 1-6) below status display
+  - Toggle selection with purple gradient highlighting
+  - "Capture Selected Inputs" button triggers automated sequence
+  - Button disabled during capture with "Capturing..." status
+  - Real-time progress updates and status messages
+  - Same retry logic and timeout protection as test sequences
+
+- **TCP Command Visual Feedback**: UI automatically updates to show inputs from last TCP command
+  - Receives TCP command → clears previous selections → highlights matching inputs
+  - Status message: "TCP command received: 1, 2, 6"
+  - Provides visual confirmation of what Stream Deck/external system requested
+
+### 🎯 Technical Changes
+**Main Process (main.js):**
+- Line 755-757: Added IPC send to update renderer when TCP command received
+- Line 785: Changed TCP handler to use `captureWithRetry()` for timeout protection
+
+**Renderer Process (renderer.js):**
+- Line 711-713: Added connection count display update in `updateDiagnostics()`
+- Line 759-762: Added `toggleInputSelection()` function for button clicks
+- Line 764-796: Added `captureSelectedInputs()` function for sequence automation
+- Line 821-823: Added listener for TCP command updates
+- Line 829-843: Added `updateInputSelection()` to sync UI with TCP commands
+
+**Preload (preload.js):**
+- Line 31: Added `onTCPCommandReceived` IPC bridge
+
+**UI (index.html):**
+- Lines 351-420: Added CSS for multi-input capture section
+- Lines 463-475: Added HTML for input selector buttons and capture button
+
+### 📦 Build Info
+- **Version**: 1.4.0
+- **File**: `dist/Nostalgia Box Controller-1.4.0-arm64.dmg`
+- **Changes**: Multi-input capture UI, connection counter fix, TCP timeout improvements
+- **Dependencies**: Same as v1.3.0 (sharp, osc, electron)
+- **Breaking Changes**: None - all features maintained and improved
