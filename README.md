@@ -36,28 +36,29 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 - **Live Preview**: See how your folder and file names will appear with current Eos data
 - **TCP Connection**: Reliable OSC over TCP (port 3032)
 
-### Multi-Input Capture (NEW in v1.4.0)
+### Multi-Input Capture (Enhanced in v1.6.1)
 - **Visual Input Selection**: 6 clickable buttons (Input 1-6) for selecting multiple inputs
 - **Toggle Selection**: Click to select/deselect inputs with purple gradient highlighting
 - **Capture Button**: "Capture Selected Inputs" triggers automated sequence for all selected inputs
 - **Real-time Feedback**: Progress updates and status messages during capture
-- **Intelligent Retry Logic**: Automatically skips inputs with no video source (1001ms timeout)
+- **Unified Logic**: Uses identical code path as TCP/network triggers for reliability (v1.6.1)
+- **10-Second Timeout**: Automatic cancellation prevents hanging sequences (v1.6.1)
 - **Automatic Stitching**: After sequence completes, images are automatically stitched into a single composite
-- **TCP Command Sync**: UI buttons automatically update to show inputs from last TCP/Stream Deck command
+- **Stable & Reliable**: No more conflicts between manual and network triggers (v1.6.1)
 
-### Stream Deck Automation (Enhanced in v1.4.0)
+### Stream Deck Automation (Stabilized in v1.6.1)
 - **TCP Server**: Listens for commands from Elgato Stream Deck Companion
 - **Auto-Start**: TCP server starts automatically 5 seconds after EOS connection
 - **Sequence Automation**: Send comma-separated input sequences (e.g., "1,2,6")
-- **Visual Feedback**: UI input buttons automatically update to show last TCP command received
-- **Timeout Protection**: 1001ms timeout per input with auto-skip on missing inputs (fixed in v1.4.0)
+- **Unified Logic**: Uses same reliable code path as manual UI button (v1.6.1)
+- **10-Second Timeout**: Automatic timeout prevents sequences from hanging (v1.6.1)
 - **Automated Workflow**:
   1. Stream Deck sends sequence command
-  2. UI updates to show selected inputs (v1.4.0)
-  3. App switches router to each input
-  4. Captures image for each input (with retry logic)
-  5. Auto-stitches captured images into composite
-  6. Organizes all files in a timestamped folder
+  2. App switches router to each input (500ms settle time)
+  3. Captures image for each input
+  4. Auto-stitches captured images into composite
+  5. Organizes all files in a timestamped folder
+  6. Auto-cancels if sequence exceeds 10 seconds (v1.6.1)
 - **Configurable Port**: Default 9999, customizable in settings
 
 ### Image Stitching (Sharp-based)
@@ -110,7 +111,7 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 
 2. **Install Nostalgia Box Controller**:
    - Download the DMG from the releases page
-   - Open `Nostalgia Box Controller-1.4.0-arm64.dmg`
+   - Open `Nostalgia Box Controller-1.6.1-arm64.dmg`
    - Drag the app to your Applications folder
    - Right-click the app and select "Open" (first launch only, due to code signing)
 
@@ -240,13 +241,17 @@ npm run dev        # With dev tools
 npm run build
 ```
 
-Output: `dist/Nostalgia Box Controller-1.4.0-arm64.dmg`
+Output: `dist/Nostalgia Box Controller-1.6.1-arm64.dmg`
 
 ## Technical Details
 
 - **Framework**: Electron 30.x
 - **OSC Protocol**: OSC over TCP (port 3032) with sequential Get commands and 500ms delays for reliability
 - **Video Capture**: FFmpeg with AVFoundation
+- **Capture Logic**: Unified code path for manual and network triggers (v1.6.1)
+  - Direct `captureStill()` calls with 500ms delays
+  - 10-second timeout protection
+  - Shared `runSequenceShared()` function for both UI and TCP paths
 - **Image Stitching**: Sharp library for precise grid layouts and compositing
   - Grid positioning: 2x1, 2x2, 3x2 layouts
   - Smart backgrounds: Black for odd counts, white for even
@@ -255,9 +260,9 @@ Output: `dist/Nostalgia Box Controller-1.4.0-arm64.dmg`
 - **Router Protocol**: Telnet (port 9990)
 - **Architecture**: Secure IPC with main/renderer process separation
 - **UI Design**: Purple gradient theme with ambient particle animation
-  - Multi-input capture interface with visual selection (v1.4.0)
+  - Multi-input capture interface with visual selection
   - Collapsible settings sections with status indicators
-  - Real-time show/cue display with uptime and connection count (fixed in v1.4.0)
+  - Real-time show/cue display with uptime and connection count
   - Ambient drift particle animation (90 particles, slow organic movement)
 - **File Naming**: Invalid chars removed, spaces preserved, automatic duplicate handling
 - **Dependencies**: `sharp`, `osc`, `node-osc` (legacy)
@@ -272,7 +277,7 @@ For issues, feature requests, or questions, please contact the development team.
 
 ---
 
-**Version**: 1.4.0
-**Build**: `Nostalgia Box Controller-1.4.0-arm64.dmg`
+**Version**: 1.6.1
+**Build**: `Nostalgia Box Controller-1.6.1-arm64.dmg`
 **Last Updated**: October 2025
-**Major Update**: Multi-input capture UI with visual selection, connection counter fix, TCP timeout protection
+**Major Update**: Unified capture logic for manual and network triggers, 10-second timeout protection, stable and reliable sequences

@@ -246,7 +246,12 @@ ipcMain.handle('get-eos-data', async () => {
 });
 
 ipcMain.handle('run-test-sequence', async (event, inputs) => {
-  return await runTestSequence(inputs);
+  // Use the same handler as TCP/network triggers for consistency
+  return await runSequenceShared(inputs, (msg, type = 'info') => {
+    if (mainWindow) {
+      mainWindow.webContents.send('sequence-progress', { message: msg, type });
+    }
+  });
 });
 
 
@@ -736,28 +741,33 @@ function stopTCPServer() {
 
 // ============== SEQUENCE AUTOMATION ==============
 
-async function handleSequenceCommand(command, socket) {
+// Shared sequence logic used by both manual UI button and TCP/network triggers
+async function runSequenceShared(inputs, writeLog) {
   if (isSequenceRunning) {
-    socket.write('ERROR: Sequence already running\n');
-    return;
+    writeLog('ERROR: Sequence already running', 'error');
+    return { success: false, error: 'Sequence already running' };
   }
 
+  // 10 second timeout wrapper
+  const sequencePromise = executeSequence(inputs, writeLog);
+  const timeoutPromise = new Promise((resolve) => {
+    setTimeout(() => {
+      writeLog('ERROR: Sequence timeout (10 seconds exceeded)', 'error');
+      isSequenceRunning = false;
+      resolve({ success: false, error: 'Sequence timeout' });
+    }, 10000);
+  });
+
+  return Promise.race([sequencePromise, timeoutPromise]);
+}
+
+async function executeSequence(inputs, writeLog) {
   try {
-    // Parse input sequence (e.g., "1,2,6")
-    const inputs = command.split(',').map(n => parseInt(n.trim())).filter(n => n >= 1 && n <= 6);
-
-    if (inputs.length === 0) {
-      socket.write('ERROR: Invalid sequence format. Use: 1,2,6\n');
-      return;
-    }
-
-    // Send inputs to renderer to update UI selection
-    if (mainWindow) {
-      mainWindow.webContents.send('tcp-command-received', inputs);
-    }
-
     isSequenceRunning = true;
-    socket.write(`Starting sequence: ${inputs.join(',')}\n`);
+    let captured = 0;
+    let failed = 0;
+
+    writeLog(`Starting sequence: ${inputs.join(',')}`, 'info');
 
     // Generate folder once for the entire sequence
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -776,7 +786,7 @@ async function handleSequenceCommand(command, socket) {
 
     for (const input of inputs) {
       try {
-        socket.write(`Switching to input ${input}...\n`);
+        writeLog(`Switching to input ${input}...`, 'info');
 
         // Switch router to input
         await setVideohubInput(input, 1);
@@ -784,104 +794,17 @@ async function handleSequenceCommand(command, socket) {
         // Wait for router to settle
         await sleep(500);
 
-        socket.write(`Capturing input ${input}...\n`);
+        writeLog(`Capturing input ${input}...`, 'info');
 
-        // Capture image with retry logic and timeout to prevent hanging
-        const result = await captureWithRetry(input, 2, 1000, captureFolder, timestamp);
+        // Capture image with shared folder
+        const result = await captureStill(input, captureFolder, timestamp);
 
         if (result.success) {
-          socket.write(`✓ Captured input ${input} to ${result.filepath}\n`);
-        } else {
-          socket.write(`✗ Failed to capture input ${input}: ${result.error}\n`);
-        }
-
-        // Wait before next capture
-        await sleep(500);
-
-      } catch (error) {
-        socket.write(`✗ Error on input ${input}: ${error.message}\n`);
-      }
-    }
-
-    // Auto-stitch if stitched output path is configured
-    if (settings.stitchedOutputPath && fs.existsSync(captureFolder)) {
-      socket.write(`Stitching captured images...\n`);
-      const stitchResult = await stitchImages(captureFolder);
-      if (stitchResult.success) {
-        socket.write(`✓ Stitched ${stitchResult.imageCount} images to ${stitchResult.filepath}\n`);
-      } else {
-        socket.write(`⚠ Stitch failed: ${stitchResult.error}\n`);
-      }
-    }
-
-    // Switch back to input 1
-    socket.write(`Switching back to input 1...\n`);
-    await setVideohubInput(1, 1);
-
-    socket.write(`Sequence complete!\n`);
-    isSequenceRunning = false;
-
-  } catch (error) {
-    console.error('Sequence error:', error);
-    socket.write(`ERROR: ${error.message}\n`);
-    isSequenceRunning = false;
-  }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ============== TEST SEQUENCE FOR OUTPUT 1 ==============
-
-async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
-  if (isSequenceRunning) {
-    return { success: false, error: 'Sequence already running' };
-  }
-
-  try {
-    isSequenceRunning = true;
-    let captured = 0;
-    let failed = 0;
-
-    sendSequenceProgress(`Starting test sequence for Output 1 (${inputs.join(',')})...`, 'info');
-
-    // Generate folder once for the entire sequence
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const folderNameRaw = replaceCaptureVariables(settings.folderNaming, inputs[0], timestamp);
-    const folderName = sanitizeFilename(folderNameRaw);
-    const baseCaptureFolder = path.join(settings.outputPath, folderName);
-
-    // Get unique folder path (adds (2), (3), etc. if folder exists)
-    const captureFolder = getUniqueFolderPath(baseCaptureFolder);
-
-    // Create folder if it doesn't exist
-    if (!fs.existsSync(captureFolder)) {
-      console.log(`Creating capture folder for test sequence: ${captureFolder}`);
-      fs.mkdirSync(captureFolder, { recursive: true });
-    }
-
-    for (const input of inputs) {
-      try {
-        sendSequenceProgress(`Switching to Input ${input}...`, 'info');
-
-        // Switch router to input
-        await setVideohubInput(input, 1);
-
-        // Wait for router to settle
-        await sleep(500);
-
-        sendSequenceProgress(`Capturing Input ${input}...`, 'info');
-
-        // Try to capture with retry logic (2 attempts, 1 second timeout each)
-        const captureResult = await captureWithRetry(input, 2, 1000, captureFolder, timestamp);
-
-        if (captureResult.success) {
           captured++;
-          sendSequenceProgress(`✓ Captured Input ${input}`, 'success');
+          writeLog(`✓ Captured input ${input} to ${result.filepath}`, 'success');
         } else {
           failed++;
-          sendSequenceProgress(`✗ Skipped Input ${input} (no source detected)`, 'error');
+          writeLog(`✗ Failed to capture input ${input}: ${result.error}`, 'error');
         }
 
         // Wait before next capture
@@ -889,41 +812,174 @@ async function runTestSequence(inputs = [1, 2, 3, 4, 5, 6]) {
 
       } catch (error) {
         failed++;
-        sendSequenceProgress(`✗ Error on Input ${input}: ${error.message}`, 'error');
+        writeLog(`✗ Error on input ${input}: ${error.message}`, 'error');
       }
     }
 
-    isSequenceRunning = false;
-
-    // Auto-stitch if we captured any images
-    if (captured > 0 && captureFolder && settings.stitchedOutputPath) {
-      sendSequenceProgress('Stitching captured images...', 'info');
-
+    // Auto-stitch if stitched output path is configured
+    if (settings.stitchedOutputPath && fs.existsSync(captureFolder)) {
+      writeLog(`Stitching captured images...`, 'info');
       const stitchResult = await stitchImages(captureFolder);
       if (stitchResult.success) {
-        sendSequenceProgress(`✓ Stitched ${stitchResult.imageCount} images to ${stitchResult.filepath}`, 'success');
+        writeLog(`✓ Stitched ${stitchResult.imageCount} images to ${stitchResult.filepath}`, 'success');
       } else {
-        sendSequenceProgress(`⚠ Stitch failed: ${stitchResult.error}`, 'error');
+        writeLog(`⚠ Stitch failed: ${stitchResult.error}`, 'error');
       }
     }
 
     // Switch back to input 1
-    sendSequenceProgress('Switching back to Input 1...', 'info');
+    writeLog(`Switching back to input 1...`, 'info');
     await setVideohubInput(1, 1);
+
+    writeLog(`Sequence complete!`, 'success');
+    isSequenceRunning = false;
 
     return {
       success: true,
       total: inputs.length,
       captured,
       failed,
-      captureFolder  // Return the actual folder path
+      captureFolder
     };
 
   } catch (error) {
-    console.error('Test sequence error:', error);
+    console.error('Sequence error:', error);
+    writeLog(`ERROR: ${error.message}`, 'error');
     isSequenceRunning = false;
     return { success: false, error: error.message };
   }
+}
+
+async function handleSequenceCommand(command, socket) {
+  try {
+    // Parse input sequence (e.g., "1,2,6")
+    const inputs = command.split(',').map(n => parseInt(n.trim())).filter(n => n >= 1 && n <= 6);
+
+    if (inputs.length === 0) {
+      socket.write('ERROR: Invalid sequence format. Use: 1,2,6\n');
+      return;
+    }
+
+    // Use shared sequence logic with socket output
+    await runSequenceShared(inputs, (msg) => socket.write(`${msg}\n`));
+
+  } catch (error) {
+    console.error('TCP sequence error:', error);
+    socket.write(`ERROR: ${error.message}\n`);
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Wait for file to stabilize (size stops changing)
+async function waitForFileStable(filepath, maxWaitMs = 2000) {
+  const startTime = Date.now();
+  let lastSize = -1;
+  let stableCount = 0;
+  const requiredStableChecks = 3; // File size must be stable for 3 checks
+
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      if (fs.existsSync(filepath)) {
+        const stats = fs.statSync(filepath);
+        if (stats.size === lastSize && stats.size > 0) {
+          stableCount++;
+          if (stableCount >= requiredStableChecks) {
+            console.log(`File stable at ${stats.size} bytes`);
+            return true;
+          }
+        } else {
+          stableCount = 0;
+          lastSize = stats.size;
+        }
+      }
+    } catch (err) {
+      // File might be locked, continue waiting
+    }
+    await sleep(100);
+  }
+
+  console.log(`File stability timeout after ${maxWaitMs}ms`);
+  return false;
+}
+
+// Fast capture with real-time file polling (NOT USED - kept for reference)
+async function captureWithFilePolling(inputNumber, captureFolder, timestamp) {
+  console.log(`=== FAST CAPTURE START (Input ${inputNumber}) ===`);
+
+  const ffmpegPath = await findWorkingFFmpeg();
+  if (!ffmpegPath) {
+    return { success: false, error: 'FFmpeg not found' };
+  }
+
+  if (!settings.selectedDevice) {
+    return { success: false, error: 'No device selected' };
+  }
+
+  const device = settings.selectedDevice;
+  const deviceIndex = device.index;
+
+  // Generate expected filepath (FILE path, not folder)
+  const filenameRaw = replaceCaptureVariables(settings.namingConvention, inputNumber, timestamp);
+  const filename = sanitizeFilename(filenameRaw);
+  const filepath = path.join(captureFolder, `${filename}.png`);
+
+  console.log(`Target FILE: ${filepath}`);
+
+  // Start FFmpeg capture process
+  const detectedFps = settings.detectedFramerate || 30;
+  const command = `${ffmpegPath} -f avfoundation -framerate ${detectedFps} -i "${deviceIndex}" -frames:v 1 -update 1 "${filepath}"`;
+
+  console.log(`Starting capture: ${command}`);
+
+  const captureProcess = exec(command, {
+    timeout: 5000,
+    env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+  });
+
+  // Poll for FILE creation (check every 100ms for max 1 second)
+  const startTime = Date.now();
+  const maxWaitTime = 1000; // 1 second max
+  const pollInterval = 100; // Check every 100ms
+
+  console.log(`Polling for FILE creation at: ${filepath}`);
+
+  while (Date.now() - startTime < maxWaitTime) {
+    // Check if FILE exists (not folder)
+    if (fs.existsSync(filepath)) {
+      try {
+        const stats = fs.statSync(filepath);
+        console.log(`File exists! Size: ${stats.size} bytes`);
+        if (stats.size > 0) {
+          const elapsed = Date.now() - startTime;
+          console.log(`✓ FILE created in ${elapsed}ms with size ${stats.size} bytes`);
+          // Give FFmpeg a moment to finish writing
+          await sleep(50);
+          return { success: true, filepath };
+        }
+      } catch (err) {
+        console.log(`Error reading file stats: ${err.message}`);
+        // File might be locked, continue polling
+      }
+    }
+    await sleep(pollInterval);
+  }
+
+  // Timeout - kill the process
+  console.log(`✗ Timeout after ${maxWaitTime}ms - killing FFmpeg process`);
+  console.log(`FILE was NOT created at: ${filepath}`);
+  try {
+    captureProcess.kill('SIGKILL');
+  } catch (err) {
+    console.log('Failed to kill process:', err.message);
+  }
+
+  return {
+    success: false,
+    error: 'No source detected (timeout)'
+  };
 }
 
 async function captureWithRetry(inputNumber, maxRetries, timeoutMs, captureFolder = null, timestamp = null) {

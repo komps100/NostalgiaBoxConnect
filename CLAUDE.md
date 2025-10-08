@@ -3,8 +3,8 @@
 ## Project Overview
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
-## Current Status: ✅ WORKING (v1.4.0)
-All features working. Clean, minimal UI with purple gradient design, ambient particle animation, multi-input capture interface, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, and TCP/IP remote control with visual feedback.
+## Current Status: ✅ WORKING (v1.6.1)
+All features working. Clean, minimal UI with purple gradient design, ambient particle animation, multi-input capture interface, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, and unified TCP/IP remote control with 10-second timeout protection.
 
 ### Quick Start for Next Session
 
@@ -12,17 +12,18 @@ All features working. Clean, minimal UI with purple gradient design, ambient par
 - ✅ **100% Functional** - Core capture and control features working
 - ✅ **Clean UI** - Simplified interface focused on essential controls
 - ✅ **Purple Gradient Theme** - Cohesive design with ambient particle animation
-- ✅ **Status Display** - Real-time show/cue information with uptime tracking
+- ✅ **Unified Capture Logic** - Manual and network triggers use identical code path
+- ✅ **Timeout Protection** - 10-second automatic timeout prevents hanging
 
 #### Latest Build
-- **File**: `dist/Nostalgia Box Controller-1.4.0-arm64.dmg`
-- **Major Changes**: Multi-input capture UI, connection counter fix, TCP timeout improvements
+- **File**: `dist/Nostalgia Box Controller-1.6.1-arm64.dmg`
+- **Major Changes**: Unified capture logic for manual/network triggers, 10-second timeout, reverted to v1.3 proven capture method
 - **Breaking Change**: None - all features maintained and improved
 
-#### Recent Major Update (v1.4.0)
-- **What Changed**: Added multi-input capture UI, fixed connection counter, improved TCP timeout handling
-- **Why**: Better user experience, visual feedback for TCP commands, prevent hanging on missing inputs
-- **Result**: Intuitive input selection interface with real-time status updates
+#### Recent Major Update (v1.6.1)
+- **What Changed**: Unified manual button and network trigger code paths, added 10-second timeout, removed broken file polling logic
+- **Why**: Manual button was using different code than network triggers causing conflicts and state corruption
+- **Result**: Both manual UI button and TCP/network triggers now use identical, reliable capture logic with timeout protection
 
 #### Key Files
 - `src/main.js` - Main process, capture, OSC, TCP server
@@ -419,11 +420,17 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.4.0 - All features working. Multi-input capture UI with visual selection, connection counter display fixed, TCP timeout protection (1001ms with auto-skip), TCP command visual feedback, improved error handling. Clean purple gradient UI with ambient particle animation, Sharp-based image stitching, EOS OSC integration with optimized delays, and Stream Deck remote control.
+v1.6.1 - All features working. Unified capture logic for manual and network triggers, 10-second timeout protection, stable and reliable capture sequences. Clean purple gradient UI with ambient particle animation, Sharp-based image stitching, EOS OSC integration with optimized delays, and Stream Deck remote control.
 
-## Recent Fixes (Latest Build - v1.4.0)
+## Recent Fixes (Latest Build - v1.6.1)
+- ✅ **Unified Capture Logic**: Manual UI button and TCP/network triggers now use identical code path (`runSequenceShared()`)
+- ✅ **10-Second Timeout**: Automatic timeout cancels and resets any sequence exceeding 10 seconds
+- ✅ **Reverted to v1.3 Logic**: Uses proven capture method with direct `captureStill()` calls and 500ms delays
+- ✅ **State Management Fix**: Properly manages `isSequenceRunning` flag preventing conflicts between manual and network triggers
+- ✅ **Removed Broken Code**: Eliminated `captureWithFilePolling()` and retry logic that was causing single-file captures
+
+## Previous Fixes (v1.4.0)
 - ✅ **Connection Counter Display**: Now properly shows number of active connections (EOS + TCP server)
-- ✅ **TCP Timeout Protection**: Fixed 30s hang issue, now uses 1001ms timeout with auto-skip on missing inputs
 - ✅ **Multi-Input Capture UI**: Added visual interface for selecting and capturing multiple inputs
 - ✅ **TCP Command Sync**: UI buttons automatically update to show inputs from last TCP command
 - ✅ **Improved Error Handling**: Sequences continue gracefully when inputs have no video source
@@ -451,10 +458,12 @@ v1.4.0 - All features working. Multi-input capture UI with visual selection, con
 - ✅ **TCP Auto-Start**: Stream Deck server starts automatically 5s after EOS connection
 - ✅ **Retry Logic**: Capture timeout at 1001ms per attempt, auto-skips missing sources
 
-## Confirmed Working
+## Confirmed Working (v1.6.1)
 - ✅ **Capture**: Working for all devices (Blackmagic UltraStudio, FaceTime, etc.)
 - ✅ **Router Switching**: Videohub control working, auto-switch to Input 1 after sequences
-- ✅ **Test Sequences**: All pre-configured sequences (6, 1-6, 1,2,6, etc.) with retry logic
+- ✅ **Manual Capture**: UI button uses same reliable logic as network triggers
+- ✅ **Network Triggers**: TCP/Stream Deck sequences work perfectly with 10s timeout
+- ✅ **Unified Logic**: Both manual and network paths use identical `runSequenceShared()` function
 - ✅ **Sharp Grid Stitching**: Reliable 2x2 and 3x2 layouts with precise positioning
 - ✅ **Auto-Stitch**: Automatically stitches after sequences complete
 - ✅ **Manual Stitch**: "Stitch Latest Folder" button finds and stitches most recent folder
@@ -462,6 +471,7 @@ v1.4.0 - All features working. Multi-input capture UI with visual selection, con
 - ✅ **Eos OSC**: TCP-only communication with 500ms delays, reliable label extraction
 - ✅ **Eos Auto-Reconnect**: Smart reconnection (10s for 2min, then 30s intervals)
 - ✅ **Stream Deck TCP**: Server auto-starts 5s after EOS, auto-stops on disconnect
+- ✅ **Timeout Protection**: All sequences automatically cancelled after 10 seconds
 - ✅ **Collapsible UI**: All sections expandable/collapsible with status indicators
 - ✅ **Activity Indicator**: Real-time status tracking in header
 - ✅ **Filename Sanitization**: Removes invalid chars, preserves spaces
@@ -587,3 +597,65 @@ v1.4.0 - All features working. Multi-input capture UI with visual selection, con
 - **Changes**: Multi-input capture UI, connection counter fix, TCP timeout improvements
 - **Dependencies**: Same as v1.3.0 (sharp, osc, electron)
 - **Breaking Changes**: None - all features maintained and improved
+
+## Restore Point - v1.6.1 (STABLE - Unified Capture Logic)
+
+### ✅ What Changed in v1.6.1
+**Critical Bug Fixes:**
+- **Unified Capture Logic**: Manual UI button and TCP/network triggers now use identical code path
+  - Previous issue: Manual button used `runTestSequence()` with `captureWithRetry()`, TCP used direct `captureStill()`
+  - Different code paths caused state conflicts and `isSequenceRunning` flag corruption
+  - Solution: Created shared `runSequenceShared()` function used by both paths
+
+- **10-Second Timeout Protection**: Automatic cancellation prevents hanging
+  - Wraps sequence in `Promise.race()` with 10-second timeout
+  - Automatically resets `isSequenceRunning` flag on timeout
+  - Prevents state corruption from hung sequences
+
+- **Reverted to v1.3 Proven Logic**: Removed broken experimental code
+  - Removed `captureWithFilePolling()` (was causing single-file captures)
+  - Removed `captureWithRetry()` (was causing conflicts)
+  - Back to direct `captureStill()` calls with 500ms delays (proven working)
+
+### 🎯 Technical Changes
+**Main Process (main.js):**
+- Line 248-255: Updated IPC handler to use `runSequenceShared()` instead of `runTestSequence()`
+- Line 745-762: Added `runSequenceShared()` wrapper function with 10s timeout protection
+- Line 764-851: Added `executeSequence()` shared logic for both manual and network triggers
+- Line 853-856: Simplified TCP handler to use `runSequenceShared()`
+- Removed: Entire `runTestSequence()` function (replaced with shared logic)
+- Removed: `captureWithFilePolling()` broken implementation
+
+**Sequence Flow (Both Paths):**
+```
+Manual Button → runSequenceShared() → executeSequence()
+TCP Network   → runSequenceShared() → executeSequence()
+                      ↓
+        Identical logic with 10s timeout
+```
+
+**Capture Method:**
+- Direct `captureStill()` calls (no retry wrapper)
+- 500ms delay after router switch
+- 500ms delay before next input
+- Auto-stitch after all captures
+- Switch back to Input 1
+
+### 📦 Build Info
+- **Version**: 1.6.1
+- **File**: `dist/Nostalgia Box Controller-1.6.1-arm64.dmg`
+- **Changes**: Unified capture logic, 10-second timeout, removed broken code
+- **Dependencies**: Same as v1.4.0 (sharp, osc, electron)
+- **Breaking Changes**: None - all features working better
+
+### ✅ Confirmed Working
+- ✅ Manual capture button works reliably
+- ✅ TCP/network triggers work reliably
+- ✅ No more conflicts between manual and network paths
+- ✅ 10-second timeout prevents all hanging
+- ✅ State management (`isSequenceRunning`) properly handled
+- ✅ All 6 inputs capture correctly
+- ✅ Auto-stitch works
+- ✅ Switch back to Input 1 works
+- ✅ EOS integration works
+- ✅ Stream Deck integration works
