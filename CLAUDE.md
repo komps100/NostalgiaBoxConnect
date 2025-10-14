@@ -3,8 +3,8 @@
 ## Project Overview
 An Electron application for controlling Blackmagic Videohub mini 6x2 router, capturing stills via Blackmagic UltraStudio Recorder 3G, and integrating with ETC Eos lighting consoles and Stream Deck Companion for automated capture workflows.
 
-## Current Status: ✅ WORKING (v1.6.1)
-All features working. Clean, minimal UI with purple gradient design, ambient particle animation, multi-input capture interface, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, and unified TCP/IP remote control with 10-second timeout protection.
+## Current Status: ✅ WORKING (v1.7.0)
+All features working. Clean, minimal UI with purple gradient design, ambient particle animation, multi-input capture interface, streamlined settings interface, ETC Eos OSC integration (TCP-only with 500ms delays), auto-reconnect, unified TCP/IP remote control with 10-second timeout protection, and remote shutdown capability.
 
 ### Quick Start for Next Session
 
@@ -16,14 +16,14 @@ All features working. Clean, minimal UI with purple gradient design, ambient par
 - ✅ **Timeout Protection** - 10-second automatic timeout prevents hanging
 
 #### Latest Build
-- **File**: `dist/Nostalgia Box Controller-1.6.1-arm64.dmg`
-- **Major Changes**: Unified capture logic for manual/network triggers, 10-second timeout, reverted to v1.3 proven capture method
+- **File**: `dist/Nostalgia Box Controller-1.7.0-arm64.dmg`
+- **Major Changes**: Added remote shutdown command for closing applications and shutting down computer via TCP
 - **Breaking Change**: None - all features maintained and improved
 
-#### Recent Major Update (v1.6.1)
-- **What Changed**: Unified manual button and network trigger code paths, added 10-second timeout, removed broken file polling logic
-- **Why**: Manual button was using different code than network triggers causing conflicts and state corruption
-- **Result**: Both manual UI button and TCP/network triggers now use identical, reliable capture logic with timeout protection
+#### Recent Major Update (v1.7.0)
+- **What Changed**: Added remote shutdown functionality via TCP command `SHUTDOWN72842069`
+- **Why**: Allows automated shutdown of Mac via Stream Deck or network command for show control integration
+- **Result**: Single TCP command closes all applications (except Nostalgia Box Controller) and initiates system shutdown
 
 #### Key Files
 - `src/main.js` - Main process, capture, OSC, TCP server
@@ -160,11 +160,12 @@ All features working. Clean, minimal UI with purple gradient design, ambient par
 - **TCP Command Sync**: UI automatically updates to show inputs from last TCP command (NEW in v1.4.0)
 - **Unified Interface**: Same automation logic as TCP/Stream Deck remote control
 
-### ✅ Stream Deck Companion Integration (v1.1.0, enhanced in v1.4.0)
+### ✅ Stream Deck Companion Integration (v1.1.0, enhanced in v1.4.0, v1.7.0)
 - **TCP Server**: Listens for commands from Stream Deck Companion
 - **Auto-Start**: Automatically starts 5 seconds after successful EOS connection
 - **Auto-Stop**: Automatically stops when EOS disconnects
 - **Sequence Automation**: Process comma-separated input sequences (e.g., "1,2,6")
+- **Remote Shutdown** (NEW in v1.7.0): Send `SHUTDOWN72842069` command to close all applications and shut down computer
 - **Visual Feedback**: UI input buttons update to show last TCP command received (NEW in v1.4.0)
 - **Automated Workflow**:
   1. Receives sequence command from Stream Deck
@@ -279,13 +280,20 @@ npm run build      # Build distributable .app
 
 ### Stream Deck TCP Server
 - **Protocol**: Raw TCP socket server (default port 9999)
-- **Command Format**: Comma-separated input numbers (e.g., "1,2,6")
+- **Command Format**:
+  - Comma-separated input numbers (e.g., "1,2,6")
+  - Shutdown command: `SHUTDOWN72842069`
 - **Response**: Real-time text feedback sent back to client
 - **Sequence Logic**:
   1. Parse and validate input sequence (1-6 only)
   2. For each input: switch router → 500ms delay → capture → 500ms delay
   3. Creates subfolder with timestamp/Eos data
   4. Continues on error, reports failures
+- **Shutdown Logic** (NEW in v1.7.0):
+  1. Receives `SHUTDOWN72842069` command
+  2. Closes all applications except Finder, System Events, and Nostalgia Box Controller
+  3. Waits 2 seconds for graceful closure
+  4. Initiates system shutdown via AppleScript
 - **Concurrency Protection**: Only one sequence runs at a time
 - **Stream Deck Companion Setup**: Use "Generic TCP" module pointing to app IP:port
 
@@ -420,9 +428,14 @@ To use with Stream Deck Companion:
 7. Button press will trigger automated sequence
 
 ## Last Updated
-v1.6.1 - All features working. Unified capture logic for manual and network triggers, 10-second timeout protection, stable and reliable capture sequences. Clean purple gradient UI with ambient particle animation, Sharp-based image stitching, EOS OSC integration with optimized delays, and Stream Deck remote control.
+v1.7.0 - All features working. Remote shutdown command added for closing applications and shutting down Mac. Unified capture logic for manual and network triggers, 10-second timeout protection, stable and reliable capture sequences. Clean purple gradient UI with ambient particle animation, Sharp-based image stitching, EOS OSC integration with optimized delays, and Stream Deck remote control.
 
-## Recent Fixes (Latest Build - v1.6.1)
+## Recent Fixes (Latest Build - v1.7.0)
+- ✅ **Remote Shutdown Command**: Added `SHUTDOWN72842069` TCP command for automated computer shutdown
+- ✅ **Graceful Application Closure**: Closes all applications except Nostalgia Box Controller, Finder, and System Events
+- ✅ **AppleScript Integration**: Uses native macOS AppleScript for reliable shutdown sequence
+
+## Previous Fixes (v1.6.1)
 - ✅ **Unified Capture Logic**: Manual UI button and TCP/network triggers now use identical code path (`runSequenceShared()`)
 - ✅ **10-Second Timeout**: Automatic timeout cancels and resets any sequence exceeding 10 seconds
 - ✅ **Reverted to v1.3 Logic**: Uses proven capture method with direct `captureStill()` calls and 500ms delays
@@ -458,11 +471,12 @@ v1.6.1 - All features working. Unified capture logic for manual and network trig
 - ✅ **TCP Auto-Start**: Stream Deck server starts automatically 5s after EOS connection
 - ✅ **Retry Logic**: Capture timeout at 1001ms per attempt, auto-skips missing sources
 
-## Confirmed Working (v1.6.1)
+## Confirmed Working (v1.7.0)
 - ✅ **Capture**: Working for all devices (Blackmagic UltraStudio, FaceTime, etc.)
 - ✅ **Router Switching**: Videohub control working, auto-switch to Input 1 after sequences
 - ✅ **Manual Capture**: UI button uses same reliable logic as network triggers
 - ✅ **Network Triggers**: TCP/Stream Deck sequences work perfectly with 10s timeout
+- ✅ **Remote Shutdown**: TCP command closes apps and shuts down Mac reliably
 - ✅ **Unified Logic**: Both manual and network paths use identical `runSequenceShared()` function
 - ✅ **Sharp Grid Stitching**: Reliable 2x2 and 3x2 layouts with precise positioning
 - ✅ **Auto-Stitch**: Automatically stitches after sequences complete
@@ -597,6 +611,46 @@ v1.6.1 - All features working. Unified capture logic for manual and network trig
 - **Changes**: Multi-input capture UI, connection counter fix, TCP timeout improvements
 - **Dependencies**: Same as v1.3.0 (sharp, osc, electron)
 - **Breaking Changes**: None - all features maintained and improved
+
+## Restore Point - v1.7.0 (STABLE - Remote Shutdown Added)
+
+### ✅ What Changed in v1.7.0
+**New Features:**
+- **Remote Shutdown Command**: TCP command `SHUTDOWN72842069` triggers automated system shutdown
+  - Closes all applications except Nostalgia Box Controller, Finder, and System Events
+  - Uses AppleScript for native macOS integration
+  - Waits 2 seconds for graceful application closure before shutdown
+  - Keeps Nostalgia Box Controller running during shutdown process
+- **Show Control Integration**: Enables end-of-show automated shutdown via Stream Deck
+
+### 🎯 Technical Changes
+**Main Process (main.js):**
+- Line 856: Added check for `SHUTDOWN72842069` command in `handleSequenceCommand()`
+- Line 886-935: Added `executeShutdown()` function with AppleScript integration
+- Line 898: Excludes "Nostalgia Box Controller" from application quit list
+- Line 920: System shutdown via AppleScript `tell application "System Events" to shut down`
+
+**Command Flow:**
+```
+TCP Command "SHUTDOWN72842069" → handleSequenceCommand() → executeShutdown()
+  ↓
+1. Close all apps (except NB Controller, Finder, System Events)
+2. Wait 2 seconds
+3. Initiate system shutdown
+```
+
+### 📦 Build Info
+- **Version**: 1.7.0
+- **File**: `dist/Nostalgia Box Controller-1.7.0-arm64.dmg`
+- **Changes**: Added remote shutdown capability
+- **Dependencies**: Same as v1.6.1 (sharp, osc, electron)
+- **Breaking Changes**: None - new feature added, all existing features maintained
+
+### ✅ Confirmed Working
+- ✅ Remote shutdown command closes applications reliably
+- ✅ System shutdown executes after application closure
+- ✅ Nostalgia Box Controller stays running during shutdown process
+- ✅ All v1.6.1 features continue working perfectly
 
 ## Restore Point - v1.6.1 (STABLE - Unified Capture Logic)
 

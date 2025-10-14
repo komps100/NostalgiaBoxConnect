@@ -852,6 +852,14 @@ async function executeSequence(inputs, writeLog) {
 
 async function handleSequenceCommand(command, socket) {
   try {
+    // Check for shutdown command
+    if (command.trim() === 'SHUTDOWN72842069') {
+      console.log('=== SHUTDOWN COMMAND RECEIVED ===');
+      socket.write('Shutdown sequence initiated. Closing applications and shutting down...\n');
+      await executeShutdown();
+      return;
+    }
+
     // Parse input sequence (e.g., "1,2,6")
     const inputs = command.split(',').map(n => parseInt(n.trim())).filter(n => n >= 1 && n <= 6);
 
@@ -871,6 +879,59 @@ async function handleSequenceCommand(command, socket) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============== SHUTDOWN COMMAND ==============
+
+async function executeShutdown() {
+  console.log('=== STARTING SHUTDOWN SEQUENCE ===');
+
+  try {
+    // Step 1: Quit all applications except Finder, System Events, and Nostalgia Box Controller
+    console.log('Closing all applications...');
+    const quitAppsScript = `
+      tell application "System Events"
+        set appList to name of every application process whose background only is false
+      end tell
+
+      repeat with appName in appList
+        if appName is not in {"Finder", "System Events", "Nostalgia Box Controller"} then
+          try
+            tell application appName to quit
+          end try
+        end if
+      end repeat
+    `;
+
+    exec(`osascript -e '${quitAppsScript}'`, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Error closing applications:', error);
+        console.error('Stderr:', stderr);
+      } else {
+        console.log('All applications closed successfully');
+      }
+    });
+
+    // Wait a moment for apps to close, then shutdown
+    await sleep(2000);
+
+    // Step 2: Shut down the computer
+    console.log('Initiating system shutdown...');
+    const shutdownScript = 'tell application "System Events" to shut down';
+
+    exec(`osascript -e '${shutdownScript}'`, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Error initiating shutdown:', error);
+        console.error('Stderr:', stderr);
+      } else {
+        console.log('Shutdown command sent successfully');
+      }
+    });
+
+  } catch (error) {
+    console.error('=== SHUTDOWN SEQUENCE ERROR ===');
+    console.error('Error:', error);
+  }
 }
 
 // Wait for file to stabilize (size stops changing)

@@ -46,10 +46,11 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 - **Automatic Stitching**: After sequence completes, images are automatically stitched into a single composite
 - **Stable & Reliable**: No more conflicts between manual and network triggers (v1.6.1)
 
-### Stream Deck Automation (Stabilized in v1.6.1)
+### Stream Deck Automation (Enhanced in v1.7.0)
 - **TCP Server**: Listens for commands from Elgato Stream Deck Companion
 - **Auto-Start**: TCP server starts automatically 5 seconds after EOS connection
 - **Sequence Automation**: Send comma-separated input sequences (e.g., "1,2,6")
+- **Remote Shutdown** (NEW in v1.7.0): Send `SHUTDOWN72842069` command to close all applications and shut down computer
 - **Unified Logic**: Uses same reliable code path as manual UI button (v1.6.1)
 - **10-Second Timeout**: Automatic timeout prevents sequences from hanging (v1.6.1)
 - **Automated Workflow**:
@@ -59,6 +60,11 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
   4. Auto-stitches captured images into composite
   5. Organizes all files in a timestamped folder
   6. Auto-cancels if sequence exceeds 10 seconds (v1.6.1)
+- **Shutdown Workflow** (NEW in v1.7.0):
+  1. Stream Deck sends `SHUTDOWN72842069` command
+  2. App closes all applications (except Nostalgia Box Controller, Finder, System Events)
+  3. Waits 2 seconds for graceful closure
+  4. Initiates macOS system shutdown
 - **Configurable Port**: Default 9999, customizable in settings
 
 ### Image Stitching (Sharp-based)
@@ -111,7 +117,7 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
 
 2. **Install Nostalgia Box Controller**:
    - Download the DMG from the releases page
-   - Open `Nostalgia Box Controller-1.6.1-arm64.dmg`
+   - Open `Nostalgia Box Controller-1.7.0-arm64.dmg`
    - Drag the app to your Applications folder
    - Right-click the app and select "Open" (first launch only, due to code signing)
 
@@ -164,6 +170,12 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
    - Press Stream Deck button
    - App automatically switches and captures each input
    - All images saved in a timestamped folder
+
+4. **Remote Shutdown** (NEW in v1.7.0):
+   - Create Stream Deck button with "Send TCP" action
+   - Enter command: `SHUTDOWN72842069`
+   - Press button to close all apps and shut down Mac
+   - Useful for end-of-show automated shutdown
 
 ## Usage Tips
 
@@ -241,7 +253,7 @@ npm run dev        # With dev tools
 npm run build
 ```
 
-Output: `dist/Nostalgia Box Controller-1.6.1-arm64.dmg`
+Output: `dist/Nostalgia Box Controller-1.7.0-arm64.dmg`
 
 ## Technical Details
 
@@ -277,7 +289,7 @@ For issues, feature requests, or questions, please contact the development team.
 
 ---
 
-**Version**: 1.6.1
-**Build**: `Nostalgia Box Controller-1.6.1-arm64.dmg`
+**Version**: 1.7.0
+**Build**: `Nostalgia Box Controller-1.7.0-arm64.dmg`
 **Last Updated**: October 2025
-**Major Update**: Unified capture logic for manual and network triggers, 10-second timeout protection, stable and reliable sequences
+**Major Update**: Remote shutdown command for automated computer shutdown via TCP, unified capture logic, 10-second timeout protection
