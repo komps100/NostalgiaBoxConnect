@@ -177,6 +177,32 @@ A professional macOS application for controlling Blackmagic Videohub routers, ca
    - Press button to close all apps and shut down Mac
    - Useful for end-of-show automated shutdown
 
+### Advanced: Dynamic Input Selection with Companion 4.0
+
+Instead of hardcoded sequences, use **Companion 4.0's expression variables** for dynamic input control:
+
+**Setup**:
+1. Create 6 custom variables: `rec1`, `rec2`, `rec3`, `rec4`, `rec5`, `rec6` (values: "0" or "1")
+2. Create toggle buttons that set these variables when pressed
+3. Create two expression variables:
+
+**Expression Variable: `sendTCP`** (builds the TCP command):
+```javascript
+concat($(custom:rec1) == '1' ? '1' : '', $(custom:rec1) == '1' && $(custom:rec2) == '1' ? ',' : '', $(custom:rec2) == '1' ? '2' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1') && $(custom:rec3) == '1' ? ',' : '', $(custom:rec3) == '1' ? '3' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1') && $(custom:rec4) == '1' ? ',' : '', $(custom:rec4) == '1' ? '4' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1') && $(custom:rec5) == '1' ? ',' : '', $(custom:rec5) == '1' ? '5' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1' || $(custom:rec5) == '1') && $(custom:rec6) == '1' ? ',' : '', $(custom:rec6) == '1' ? '6' : '')
+```
+
+**Expression Variable: `capture_label`** (displays human-readable labels):
+```javascript
+concat('Capturing: ', $(custom:rec1) == '1' ? 'A' : '', $(custom:rec1) == '1' && $(custom:rec2) == '1' ? ' ' : '', $(custom:rec2) == '1' ? 'B' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1') && $(custom:rec3) == '1' ? ' ' : '', $(custom:rec3) == '1' ? 'C' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1') && $(custom:rec4) == '1' ? ' ' : '', $(custom:rec4) == '1' ? 'D' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1') && $(custom:rec5) == '1' ? ' ' : '', $(custom:rec5) == '1' ? 'W' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1' || $(custom:rec5) == '1') && $(custom:rec6) == '1' ? ' ' : '', $(custom:rec6) == '1' ? 'M' : '')
+```
+
+**Usage**:
+- **Execute button**: Send `$(expression:sendTCP)` via TCP
+- **Button text**: Display `$(expression:capture_label)` for visual feedback
+- **Example output**: `Capturing: A B M` for inputs 1, 2, and 6
+
+**Input to letter mapping**: 1=A, 2=B, 3=C, 4=D, 5=W, 6=M
+
 ## Usage Tips
 
 ### Naming Conventions

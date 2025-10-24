@@ -427,6 +427,47 @@ To use with Stream Deck Companion:
 6. Enter sequence like: `1,2,6`
 7. Button press will trigger automated sequence
 
+### 🎯 Stream Deck Companion 4.0 Expression Variables
+**Dynamic Input Selection with Expression Variables:**
+
+Instead of hardcoded sequences, use Companion 4.0's expression variables to dynamically build commands based on button states.
+
+**Setup:**
+1. Create 6 custom variables: `rec1`, `rec2`, `rec3`, `rec4`, `rec5`, `rec6` (values: "0" or "1")
+2. Create toggle buttons that set these variables to "1" when active, "0" when inactive
+3. Create expression variables to translate these into TCP commands
+
+**Expression Variable: `sendTCP`** (builds comma-separated command):
+```javascript
+concat($(custom:rec1) == '1' ? '1' : '', $(custom:rec1) == '1' && $(custom:rec2) == '1' ? ',' : '', $(custom:rec2) == '1' ? '2' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1') && $(custom:rec3) == '1' ? ',' : '', $(custom:rec3) == '1' ? '3' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1') && $(custom:rec4) == '1' ? ',' : '', $(custom:rec4) == '1' ? '4' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1') && $(custom:rec5) == '1' ? ',' : '', $(custom:rec5) == '1' ? '5' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1' || $(custom:rec5) == '1') && $(custom:rec6) == '1' ? ',' : '', $(custom:rec6) == '1' ? '6' : '')
+```
+
+**Expression Variable: `capture_label`** (displays letter labels):
+```javascript
+concat('Capturing: ', $(custom:rec1) == '1' ? 'A' : '', $(custom:rec1) == '1' && $(custom:rec2) == '1' ? ' ' : '', $(custom:rec2) == '1' ? 'B' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1') && $(custom:rec3) == '1' ? ' ' : '', $(custom:rec3) == '1' ? 'C' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1') && $(custom:rec4) == '1' ? ' ' : '', $(custom:rec4) == '1' ? 'D' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1') && $(custom:rec5) == '1' ? ' ' : '', $(custom:rec5) == '1' ? 'W' : '', ($(custom:rec1) == '1' || $(custom:rec2) == '1' || $(custom:rec3) == '1' || $(custom:rec4) == '1' || $(custom:rec5) == '1') && $(custom:rec6) == '1' ? ' ' : '', $(custom:rec6) == '1' ? 'M' : '')
+```
+
+**Input to Letter Mapping:**
+- Input 1 = A
+- Input 2 = B
+- Input 3 = C
+- Input 4 = D
+- Input 5 = W
+- Input 6 = M
+
+**Usage in Companion:**
+- **Execute button**: Send TCP command using `$(expression:sendTCP)`
+- **Button label**: Display status using `$(expression:capture_label)`
+- **Output examples**:
+  - rec1=1, rec2=1, rec6=1 → Command: `1,2,6` → Label: `Capturing: A B M`
+  - rec1=1, rec2=1, rec3=1, rec4=1, rec5=1, rec6=1 → Command: `1,2,3,4,5,6` → Label: `Capturing: A B C D W M`
+
+**Important Notes:**
+- Use single quotes `'1'` not double quotes `"1"` in Companion expressions
+- Do not use local variables (not supported in expression variables)
+- Use `concat()` function for string concatenation
+- Expression must be fully nested (like Excel formulas, no intermediate variables)
+
 ## Last Updated
 v1.7.0 - All features working. Remote shutdown command added for closing applications and shutting down Mac. Unified capture logic for manual and network triggers, 10-second timeout protection, stable and reliable capture sequences. Clean purple gradient UI with ambient particle animation, Sharp-based image stitching, EOS OSC integration with optimized delays, and Stream Deck remote control.
 

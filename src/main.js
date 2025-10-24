@@ -674,22 +674,24 @@ function startTCPServer() {
 
     try {
       tcpServer = net.createServer((socket) => {
-        console.log('Stream Deck client connected');
+        const clientIP = socket.remoteAddress;
+        const clientPort = socket.remotePort;
+        console.log(`[TCP SERVER] Client connected from ${clientIP}:${clientPort}`);
 
         socket.on('data', async (data) => {
           const command = data.toString().trim();
-          console.log('Received command:', command);
+          console.log(`[TCP SERVER] Command received from ${clientIP}:${clientPort}: "${command}"`);
 
           // Parse sequence command (e.g., "1,2,6")
           await handleSequenceCommand(command, socket);
         });
 
         socket.on('error', (err) => {
-          console.error('Socket error:', err);
+          console.error(`[TCP SERVER] Socket error from ${clientIP}:${clientPort}:`, err);
         });
 
         socket.on('close', () => {
-          console.log('Stream Deck client disconnected');
+          console.log(`[TCP SERVER] Client disconnected from ${clientIP}:${clientPort}`);
         });
       });
 
@@ -887,8 +889,8 @@ async function executeShutdown() {
   console.log('=== STARTING SHUTDOWN SEQUENCE ===');
 
   try {
-    // Step 1: Quit all applications except Finder, System Events, and Nostalgia Box Controller
-    console.log('Closing all applications...');
+    // Step 1: Try graceful quit for all applications except Finder, System Events, and Nostalgia Box Controller
+    console.log('Closing all applications gracefully...');
     const quitAppsScript = `
       tell application "System Events"
         set appList to name of every application process whose background only is false
@@ -908,14 +910,42 @@ async function executeShutdown() {
         console.error('Error closing applications:', error);
         console.error('Stderr:', stderr);
       } else {
-        console.log('All applications closed successfully');
+        console.log('Applications quit command sent');
       }
     });
 
-    // Wait a moment for apps to close, then shutdown
-    await sleep(2000);
+    // Wait for graceful quit
+    await sleep(3000);
 
-    // Step 2: Shut down the computer
+    // Step 2: Force quit any stubborn apps
+    console.log('Force quitting stubborn applications...');
+    const forceQuitScript = `
+      tell application "System Events"
+        set stubborn to name of every application process whose background only is false
+      end tell
+
+      repeat with appName in stubborn
+        if appName is not in {"Finder", "System Events", "Nostalgia Box Controller"} then
+          try
+            do shell script "killall -9 " & quoted form of appName
+          end try
+        end if
+      end repeat
+    `;
+
+    exec(`osascript -e '${forceQuitScript}'`, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Error force quitting applications:', error);
+        console.error('Stderr:', stderr);
+      } else {
+        console.log('Stubborn applications force quit');
+      }
+    });
+
+    // Wait for force quit to complete
+    await sleep(1000);
+
+    // Step 3: Shut down the computer
     console.log('Initiating system shutdown...');
     const shutdownScript = 'tell application "System Events" to shut down';
 

@@ -48,7 +48,9 @@ let connectionCount = 0;
 
 // Helper functions for naming preview
 function sanitizeFilename(str) {
-    return str
+    // Ensure str is a string (convert null/undefined/numbers to string)
+    const stringValue = String(str ?? '');
+    return stringValue
         .replace(/[<>:"/\\|?*]/g, '_')
         .replace(/,/g, '_');
 }
