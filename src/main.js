@@ -373,12 +373,6 @@ function connectToEos() {
         oscTCPPort = null;
         sendEosStatusUpdate();
 
-        // Stop TCP server when EOS disconnects
-        if (tcpServer) {
-          console.log('Stopping TCP server due to EOS disconnect');
-          stopTCPServer();
-        }
-
         // Start auto-reconnect
         startEosAutoReconnect();
       });
@@ -678,6 +672,9 @@ function startTCPServer() {
         const clientPort = socket.remotePort;
         console.log(`[TCP SERVER] Client connected from ${clientIP}:${clientPort}`);
 
+        // Enable TCP keepalive to detect dead connections in noisy networks
+        socket.setKeepAlive(true, 10000);
+
         socket.on('data', async (data) => {
           const command = data.toString().trim();
           console.log(`[TCP SERVER] Command received from ${clientIP}:${clientPort}: "${command}"`);
@@ -829,9 +826,9 @@ async function executeSequence(inputs, writeLog) {
       }
     }
 
-    // Switch back to input 1
-    writeLog(`Switching back to input 1...`, 'info');
-    await setVideohubInput(1, 1);
+    // Switch back to input 4
+    writeLog(`Switching back to input 4...`, 'info');
+    await setVideohubInput(4, 1);
 
     writeLog(`Sequence complete!`, 'success');
     isSequenceRunning = false;
@@ -854,6 +851,18 @@ async function executeSequence(inputs, writeLog) {
 
 async function handleSequenceCommand(command, socket) {
   try {
+    // STATUS command for Companion module polling
+    if (command === 'STATUS') {
+      socket.write(JSON.stringify({
+        online: true,
+        busy: isSequenceRunning,
+        eos: eosData.connected,
+        show: eosData.showName || '',
+        cue: eosData.cueLabel || ''
+      }) + '\n');
+      return;
+    }
+
     // Check for shutdown command
     if (command.trim() === 'SHUTDOWN72842069') {
       console.log('=== SHUTDOWN COMMAND RECEIVED ===');
