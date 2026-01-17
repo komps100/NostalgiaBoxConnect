@@ -824,8 +824,27 @@ async function init() {
         updateInputSelection(inputs);
     });
 
+    // Listen for capture status updates
+    window.electronAPI.onCaptureStatus((status) => {
+        updateCaptureStatus(status);
+    });
+
     // Start diagnostics update
     updateDiagnostics();
+}
+
+function updateCaptureStatus(status) {
+    const pill = document.getElementById('captureStatusPill');
+    const text = document.getElementById('captureStatusText');
+
+    if (!pill || !text) return;
+
+    if (status.capturing) {
+        pill.style.display = 'flex';
+        text.textContent = `Capturing Input ${status.input} (${status.current}/${status.total})`;
+    } else {
+        pill.style.display = 'none';
+    }
 }
 
 function updateInputSelection(inputs) {

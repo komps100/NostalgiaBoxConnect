@@ -785,6 +785,11 @@ async function executeSequence(inputs, writeLog) {
 
     for (const input of inputs) {
       try {
+        // Send capture status to UI
+        if (mainWindow) {
+          mainWindow.webContents.send('capture-status', { capturing: true, input, total: inputs.length, current: inputs.indexOf(input) + 1 });
+        }
+
         writeLog(`Switching to input ${input}...`, 'info');
 
         // Switch router to input
@@ -813,6 +818,11 @@ async function executeSequence(inputs, writeLog) {
         failed++;
         writeLog(`✗ Error on input ${input}: ${error.message}`, 'error');
       }
+    }
+
+    // Clear capture status
+    if (mainWindow) {
+      mainWindow.webContents.send('capture-status', { capturing: false });
     }
 
     // Auto-stitch if stitched output path is configured
@@ -1472,8 +1482,13 @@ async function captureStill(inputNumber, providedCaptureFolder = null, providedT
 
 // Sanitize a string for use in filenames/folder names
 function sanitizeFilename(str) {
+  // Ensure str is a string
+  if (str === null || str === undefined) {
+    return 'unknown';
+  }
+  const s = String(str);
   // Remove or replace characters that are invalid in filenames
-  return str
+  return s
     .replace(/[<>:"/\\|?*]/g, '_')  // Replace invalid chars with underscore
     .replace(/,/g, '_');             // Replace commas with underscore
 }
@@ -1517,9 +1532,12 @@ function getUniqueFilePath(filePath) {
 }
 
 function replaceCaptureVariables(template, inputNumber, timestamp) {
+  // Ensure template is a string
+  const t = String(template || '{input}');
+
   // Sanitize each value before replacing
-  const sanitizedInput = sanitizeFilename(String(inputNumber));
-  const sanitizedTimestamp = sanitizeFilename(timestamp);
+  const sanitizedInput = sanitizeFilename(String(inputNumber || '1'));
+  const sanitizedTimestamp = sanitizeFilename(String(timestamp || new Date().toISOString().replace(/[:.]/g, '-')));
 
   // Generate date-only string in YYYYMMDD format
   const now = new Date();
@@ -1534,7 +1552,7 @@ function replaceCaptureVariables(template, inputNumber, timestamp) {
   const sanitizedCueNumber = sanitizeFilename(eosData.cueNumber || 'unknown');
   const sanitizedShowName = sanitizeFilename(eosData.showName || 'unknown');
 
-  return template
+  return t
     .replace('{input}', sanitizedInput)
     .replace('{timestamp}', sanitizedTimestamp)
     .replace('{date}', dateOnly)                         // Date only YYYYMMDD
